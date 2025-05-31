@@ -11,6 +11,7 @@ categories = ["parser-implementations"]
 
 
 [dependencies]
+strum = { version = "0.27.1", features = ["derive", "strum_macros"] }
 winnow = "0.7.10"
 
 [dev-dependencies]
@@ -18,4 +19,3 @@ insta = "1.43.1"
 
 [profile.dev.package]
 insta.opt-level = 3
-similar.opt-level = 3
