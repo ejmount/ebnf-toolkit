@@ -1,7 +1,7 @@
 use crate::{
     Span,
     error::TokenContext,
-    token::{LexedInput, Token, TokenKind, TokenStore, any_token},
+    token_data::{LexedInput, Token, TokenKind, TokenStore, any_token},
 };
 
 use winnow::{
@@ -58,7 +58,7 @@ mod test {
 
     use crate::{
         error::TokenError,
-        token::{TokenKind, tokenize},
+        lexing::{TokenKind, tokenize},
     };
 
     #[test]

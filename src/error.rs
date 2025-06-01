@@ -1,7 +1,6 @@
 use crate::{
     RawInput,
-    token::LexedInput,
-    token::{TokenKind, TokenSet},
+    token_data::{LexedInput, TokenKind, TokenSet},
 };
 use winnow::error::{ContextError, ParseError};
 

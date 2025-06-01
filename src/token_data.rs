@@ -1,22 +1,16 @@
-use arrayvec::ArrayVec;
-use std::{
-    fmt::Debug,
-    ops::{Deref, Range},
-};
+use std::{fmt::Debug, ops::Deref};
 
+use arrayvec::ArrayVec;
 use strum::{Display, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantArray};
 use winnow::{
-    ModalResult, Parser,
-    ascii::{alpha1, alphanumeric0, space1},
-    combinator::{alt, delimited, opt, repeat},
-    error::ContextError,
+    Parser,
+    error::{ContextError, ParserError},
     stream::{Accumulate, Stream, TokenSlice},
-    token::none_of,
 };
 
 use crate::{
-    RawInput, Span,
-    error::{EbnfError, TokenContext, TokenError},
+    Span,
+    error::{TokenContext, TokenError},
 };
 
 // Inherit lots of winnow machinery for the view into the tokens
@@ -125,56 +119,34 @@ impl<'input> Parser<LexedInput<'input>, Token<'input>, TokenContext> for TokenSe
         })
     }
 }
-// Exists for readability, to resemble `one_of`
-#[inline(always)]
-pub(crate) fn any_token(slice: &[TokenKind]) -> TokenSet {
-    TokenSet::new(slice)
-}
-
-pub fn parse_identifier<'a>(input: &mut RawInput<'a>) -> ModalResult<&'a str> {
-    (alpha1, alphanumeric0).take().parse_next(input)
-}
-
-pub fn parse_string<'a>(input: &mut RawInput<'a>) -> ModalResult<&'a str> {
-    delimited(
-        "'",
-        repeat(0.., none_of(&['\''])).fold(|| (), |_, _| ()).take(),
-        "'",
-    )
-    .parse_next(input)
-}
-
-fn parse_token<'a>(input: &mut RawInput<'a>) -> ModalResult<Token<'a>> {
-    let (kind, Range { start, end }) = alt((
-        parse_identifier.map(TokenPayload::Identifier),
-        parse_string.map(TokenPayload::String),
-        "::=".value(TokenPayload::Equals),
-        ";".value(TokenPayload::Termination),
-        "|".value(TokenPayload::Alternation),
-        "?".value(TokenPayload::Optional),
-        "(".value(TokenPayload::OpeningGroup),
-        ")".value(TokenPayload::ClosingGroup),
-        "[".value(TokenPayload::OpeningSquare),
-        "]".value(TokenPayload::ClosingSquare),
-        space1.map(TokenPayload::Whitespace),
-        (opt("\r"), "\n").value(TokenPayload::Newline),
-    ))
-    .with_span()
-    .parse_next(input)?;
-
-    Ok({
-        Token {
-            span: (start, end),
-            payload: kind,
-        }
-    })
-}
 
 /// An owning buffer of Tokens, where most `LexedInput` is going to be pointing to.
 /// This has an explicit name so there's some control over what interface it has because at some point
 /// it'll need generalized for no_std
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TokenStore<'a>(Vec<Token<'a>>);
+
+impl<'a> TokenStore<'a> {
+    pub(crate) fn accumulator<P, I, E>(
+        repeater: winnow::combinator::Repeat<P, I, Token<'a>, (), E>,
+    ) -> impl Parser<I, TokenStore<'a>, E>
+    where
+        P: Parser<I, Token<'a>, E>,
+        I: Stream,
+        E: ParserError<I>,
+    {
+        repeater.fold(
+            || TokenStore(vec![]),
+            |mut store, token| {
+                if token.payload.get_bool("trivial").is_none() {
+                    store.0.push(token);
+                }
+                store
+            },
+        )
+    }
+}
+
 impl<'a> Deref for TokenStore<'a> {
     type Target = [Token<'a>];
     fn deref(&self) -> &Self::Target {
@@ -192,36 +164,8 @@ impl<'a> Accumulate<Token<'a>> for TokenStore<'a> {
     }
 }
 
-pub(crate) fn tokenize<'a>(input: RawInput<'a>) -> Result<TokenStore<'a>, EbnfError<'a>> {
-    repeat(0.., parse_token)
-        .fold(
-            || TokenStore(vec![]),
-            |mut store, token| {
-                if token.payload.get_bool("trivial").is_none() {
-                    store.0.push(token);
-                }
-                store
-            },
-        )
-        .parse(input)
-        .map_err(EbnfError::LexError)
-}
-
-#[cfg(test)]
-mod test {
-    use insta::assert_compact_debug_snapshot;
-    use winnow::LocatingSlice;
-
-    use super::tokenize;
-
-    #[test]
-    fn basic_token_test() {
-        let input =
-            "message       ::= ['@' tags SPACE] [':' source SPACE ] command [parameters] crlf;";
-
-        let input = LocatingSlice::new(input);
-        let tokens = tokenize(input).unwrap();
-
-        assert_compact_debug_snapshot!(&tokens[..], @r#"[Identifier[0,7]("message"), Equals[14,17], OpeningSquare[18,19], String[19,22]("@"), Identifier[23,27]("tags"), Identifier[28,33]("SPACE"), ClosingSquare[33,34], OpeningSquare[35,36], String[36,39](":"), Identifier[40,46]("source"), Identifier[47,52]("SPACE"), ClosingSquare[53,54], Identifier[55,62]("command"), OpeningSquare[63,64], Identifier[64,74]("parameters"), ClosingSquare[74,75], Identifier[76,80]("crlf"), Termination[80,81]]"#);
-    }
+// Exists for readability, to resemble `one_of`
+#[inline(always)]
+pub(crate) fn any_token(slice: &[TokenKind]) -> TokenSet {
+    TokenSet::new(slice)
 }
