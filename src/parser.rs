@@ -1,7 +1,7 @@
 use crate::{
-    LexedInput, Span,
+    Span,
     error::TokenContext,
-    token::{Token, TokenKind, any_token},
+    token::{LexedInput, Token, TokenKind, TokenStore, any_token},
 };
 
 use winnow::{
@@ -12,7 +12,7 @@ use winnow::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LexedRule<'a> {
     name: Token<'a>,
-    tree: Vec<Token<'a>>,
+    tree: TokenStore<'a>,
 }
 
 const RULE_BODY_TOKENS: &[TokenKind] = &[
@@ -57,7 +57,6 @@ mod test {
     use winnow::{LocatingSlice, error::ParseError, stream::TokenSlice};
 
     use crate::{
-        LexedInput,
         error::TokenError,
         token::{TokenKind, tokenize},
     };

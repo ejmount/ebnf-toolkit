@@ -1,5 +1,8 @@
 use arrayvec::ArrayVec;
-use std::{fmt::Debug, ops::Range};
+use std::{
+    fmt::Debug,
+    ops::{Deref, Range},
+};
 
 use strum::{Display, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantArray};
 use winnow::{
@@ -7,14 +10,17 @@ use winnow::{
     ascii::{alpha1, alphanumeric0, space1},
     combinator::{alt, delimited, opt, repeat},
     error::ContextError,
-    stream::Stream,
+    stream::{Accumulate, Stream, TokenSlice},
     token::none_of,
 };
 
 use crate::{
-    LexedInput, RawInput, Span,
+    RawInput, Span,
     error::{EbnfError, TokenContext, TokenError},
 };
+
+// Inherit lots of winnow machinery for the view into the tokens
+pub(crate) type LexedInput<'a> = TokenSlice<'a, Token<'a>>;
 
 #[derive(Clone, Copy, Eq)]
 pub(crate) struct Token<'a> {
@@ -164,19 +170,46 @@ fn parse_token<'a>(input: &mut RawInput<'a>) -> ModalResult<Token<'a>> {
     })
 }
 
-#[allow(unused)]
-pub fn tokenize<'a>(input: RawInput<'a>) -> Result<Vec<Token<'a>>, EbnfError<'a>> {
-    let mut tokens: Vec<_> = repeat(0.., parse_token)
-        .parse(input)
-        .map_err(EbnfError::LexError)?;
+/// An owning buffer of Tokens, where most `LexedInput` is going to be pointing to.
+/// This has an explicit name so there's some control over what interface it has because at some point
+/// it'll need generalized for no_std
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TokenStore<'a>(Vec<Token<'a>>);
+impl<'a> Deref for TokenStore<'a> {
+    type Target = [Token<'a>];
+    fn deref(&self) -> &Self::Target {
+        &self.0[..]
+    }
+}
 
-    tokens.retain(|t| t.payload.get_bool("trivial").is_none());
-    Ok(tokens)
+impl<'a> Accumulate<Token<'a>> for TokenStore<'a> {
+    fn initial(capacity: Option<usize>) -> Self {
+        TokenStore(Vec::with_capacity(capacity.unwrap_or(0)))
+    }
+
+    fn accumulate(&mut self, acc: Token<'a>) {
+        self.0.push(acc);
+    }
+}
+
+pub(crate) fn tokenize<'a>(input: RawInput<'a>) -> Result<TokenStore<'a>, EbnfError<'a>> {
+    repeat(0.., parse_token)
+        .fold(
+            || TokenStore(vec![]),
+            |mut store, token| {
+                if token.payload.get_bool("trivial").is_none() {
+                    store.0.push(token);
+                }
+                store
+            },
+        )
+        .parse(input)
+        .map_err(EbnfError::LexError)
 }
 
 #[cfg(test)]
 mod test {
-    use insta::{assert_compact_debug_snapshot, assert_debug_snapshot, assert_snapshot};
+    use insta::assert_compact_debug_snapshot;
     use winnow::LocatingSlice;
 
     use super::tokenize;
@@ -189,6 +222,6 @@ mod test {
         let input = LocatingSlice::new(input);
         let tokens = tokenize(input).unwrap();
 
-        assert_compact_debug_snapshot!(tokens, @r#"[Identifier[0,7]("message"), Equals[14,17], OpeningSquare[18,19], String[19,22]("@"), Identifier[23,27]("tags"), Identifier[28,33]("SPACE"), ClosingSquare[33,34], OpeningSquare[35,36], String[36,39](":"), Identifier[40,46]("source"), Identifier[47,52]("SPACE"), ClosingSquare[53,54], Identifier[55,62]("command"), OpeningSquare[63,64], Identifier[64,74]("parameters"), ClosingSquare[74,75], Identifier[76,80]("crlf"), Termination[80,81]]"#);
+        assert_compact_debug_snapshot!(&tokens[..], @r#"[Identifier[0,7]("message"), Equals[14,17], OpeningSquare[18,19], String[19,22]("@"), Identifier[23,27]("tags"), Identifier[28,33]("SPACE"), ClosingSquare[33,34], OpeningSquare[35,36], String[36,39](":"), Identifier[40,46]("source"), Identifier[47,52]("SPACE"), ClosingSquare[53,54], Identifier[55,62]("command"), OpeningSquare[63,64], Identifier[64,74]("parameters"), ClosingSquare[74,75], Identifier[76,80]("crlf"), Termination[80,81]]"#);
     }
 }
