@@ -17,15 +17,9 @@ use crate::{
 };
 
 #[derive(Clone, Copy, Eq)]
-pub struct Token<'a> {
-    span: Span,
-    payload: TokenPayload<'a>,
-}
-
-impl Token<'_> {
-    pub fn payload(&self) -> TokenPayload<'_> {
-        self.payload
-    }
+pub(crate) struct Token<'a> {
+    pub(crate) span: Span,
+    pub(crate) payload: TokenPayload<'a>,
 }
 
 impl Debug for Token<'_> {
@@ -49,13 +43,12 @@ impl PartialEq for Token<'_> {
     }
 }
 
-#[derive(
-    EnumDiscriminants, IntoStaticStr, EnumProperty, Debug, Clone, Copy, PartialEq, Eq, Hash,
-)]
+#[derive(EnumDiscriminants, IntoStaticStr, EnumProperty)]
 #[strum_discriminants(
     name(TokenKind),
     derive(IntoStaticStr, VariantArray, Display, PartialOrd, Ord)
 )]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenPayload<'a> {
     Identifier(&'a str),
     Equals,
@@ -126,8 +119,9 @@ impl<'input> Parser<LexedInput<'input>, Token<'input>, TokenContext> for TokenSe
         })
     }
 }
-
-pub(crate) fn any_tag(slice: &[TokenKind]) -> TokenSet {
+// Exists for readability, to resemble `one_of`
+#[inline(always)]
+pub(crate) fn any_token(slice: &[TokenKind]) -> TokenSet {
     TokenSet::new(slice)
 }
 

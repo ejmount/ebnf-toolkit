@@ -1,7 +1,7 @@
 use crate::{
     LexedInput, Span,
-    error::{TokenContext, TokenError},
-    token::{Token, TokenKind, TokenSet, any_tag},
+    error::TokenContext,
+    token::{Token, TokenKind, any_token},
 };
 
 use winnow::{
@@ -10,7 +10,7 @@ use winnow::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Rule<'a> {
+pub(crate) struct LexedRule<'a> {
     name: Token<'a>,
     tree: Vec<Token<'a>>,
 }
@@ -27,16 +27,14 @@ const RULE_BODY_TOKENS: &[TokenKind] = &[
     TokenKind::Whitespace,
 ];
 
-fn parse_rule<'a>() -> impl Parser<LexedInput<'a>, Rule<'a>, TokenContext> {
+fn parse_rule<'a>() -> impl Parser<LexedInput<'a>, LexedRule<'a>, TokenContext> {
+    use TokenKind::*;
     seq! {
-       Rule {
-           name: TokenKind::Identifier,
-           _: repeat(0.., TokenKind::Whitespace).fold(|| (), |_,_| ()),
-           _: TokenKind::Equals,
-           tree: repeat(1.., any_tag(RULE_BODY_TOKENS).context(TokenError {
-            expected: TokenSet::new(&[TokenKind::Alternation]),
-            found: TokenKind::Alternation.into(),
-        })),
+       LexedRule {
+           name: Identifier,
+           _: Equals,
+           tree: repeat(1.., any_token(RULE_BODY_TOKENS)),
+           _: Termination,
        }
     }
 }
@@ -53,7 +51,9 @@ pub struct Node {
 
 #[cfg(test)]
 mod test {
-    use insta::{assert_compact_debug_snapshot, assert_debug_snapshot, assert_snapshot};
+    use super::parse_rule;
+    use insta::assert_compact_debug_snapshot;
+    use winnow::Parser;
     use winnow::{LocatingSlice, error::ParseError, stream::TokenSlice};
 
     use crate::{
@@ -61,9 +61,6 @@ mod test {
         error::TokenError,
         token::{TokenKind, tokenize},
     };
-
-    use super::parse_rule;
-    use winnow::Parser;
 
     #[test]
     fn reporting_unexpected_token() {
