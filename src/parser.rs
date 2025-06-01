@@ -1,13 +1,12 @@
 use crate::{
     LexedInput, Span,
-    error::TokenContext,
-    token::{Token, TokenKind, any_tag},
+    error::{TokenContext, TokenError},
+    token::{Token, TokenKind, TokenSet, any_tag},
 };
 
 use winnow::{
     Parser,
     combinator::{repeat, seq},
-    error::ContextError,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,14 +27,14 @@ const RULE_BODY_TOKENS: &[TokenKind] = &[
     TokenKind::Whitespace,
 ];
 
-fn parse_rule<'a>() -> impl Parser<LexedInput<'a>, Rule<'a>, ContextError<TokenContext<'static>>> {
+fn parse_rule<'a>() -> impl Parser<LexedInput<'a>, Rule<'a>, TokenContext> {
     seq! {
        Rule {
            name: TokenKind::Identifier,
            _: repeat(0.., TokenKind::Whitespace).fold(|| (), |_,_| ()),
            _: TokenKind::Equals,
-           tree: repeat(1.., any_tag(RULE_BODY_TOKENS).context(TokenContext {
-            expected: &[TokenKind::Alternation],
+           tree: repeat(1.., any_tag(RULE_BODY_TOKENS).context(TokenError {
+            expected: TokenSet::new(&[TokenKind::Alternation]),
             found: TokenKind::Alternation.into(),
         })),
        }
@@ -43,7 +42,7 @@ fn parse_rule<'a>() -> impl Parser<LexedInput<'a>, Rule<'a>, ContextError<TokenC
 }
 
 #[allow(unused)]
-fn parse_rule_body<'a>(_input: &mut LexedInput) -> Result<(), ContextError<TokenContext<'a>>> {
+fn parse_rule_body(_input: &mut LexedInput) -> Result<(), TokenContext> {
     Ok(())
 }
 
@@ -54,12 +53,12 @@ pub struct Node {
 
 #[cfg(test)]
 mod test {
-    use insta::{assert_debug_snapshot, assert_snapshot};
+    use insta::{assert_compact_debug_snapshot, assert_debug_snapshot, assert_snapshot};
     use winnow::{LocatingSlice, error::ParseError, stream::TokenSlice};
 
     use crate::{
         LexedInput,
-        error::TokenContext,
+        error::TokenError,
         token::{TokenKind, tokenize},
     };
 
@@ -70,7 +69,6 @@ mod test {
     fn reporting_unexpected_token() {
         let bad_input = LocatingSlice::new("bad ::= ::=");
         let mut bad_tokens = tokenize(bad_input).unwrap();
-        bad_tokens.retain(|t| TokenKind::from(t.payload()) != TokenKind::Whitespace);
         let bad_tokens = TokenSlice::new(&bad_tokens);
         let bad_result = parse_rule().parse(bad_tokens);
 
@@ -78,23 +76,6 @@ mod test {
         let ctx: Vec<_> = err.inner().context().collect();
         let tok_context = ctx.first().unwrap();
 
-        assert_debug_snapshot!(tok_context, @r"
-        TokenContext {
-            expected: [
-                Identifier,
-                Alternation,
-                Optional,
-                String,
-                OpeningGroup,
-                ClosingGroup,
-                OpeningSquare,
-                ClosingSquare,
-                Whitespace,
-            ],
-            found: Some(
-                Equals,
-            ),
-        }
-        ");
+        assert_compact_debug_snapshot!(tok_context, @"TokenError { expected: TokenSet([Identifier, Alternation, Optional, String, OpeningGroup, ClosingGroup, OpeningSquare, ClosingSquare, Whitespace]), found: Some(Equals) }");
     }
 }

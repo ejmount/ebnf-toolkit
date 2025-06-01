@@ -7,6 +7,6 @@ mod error;
 mod parser;
 mod token;
 
-pub type RawInput<'a> = LocatingSlice<&'a str>;
-pub type LexedInput<'a> = TokenSlice<'a, Token<'a>>;
-pub type Span = (usize, usize);
+pub(crate) type RawInput<'a> = LocatingSlice<&'a str>;
+pub(crate) type LexedInput<'a> = TokenSlice<'a, Token<'a>>;
+pub(crate) type Span = (usize, usize);
