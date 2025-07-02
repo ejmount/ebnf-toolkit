@@ -1,4 +1,3 @@
-use display_tree::AsTree;
 use regex::Regex;
 use strum::VariantNames;
 use winnow::{
@@ -10,12 +9,12 @@ use crate::{
     container::MyVec as Vec,
     lexing::tokenize,
     nodes::{LrStack, Node, NodeKind, NodePayload, Rule},
-    token_data::{LexedInput, Span, Token, TokenKind, TokenStore},
+    token_data::{LexedInput, Span, TokenKind, TokenStore},
 };
 
 const ANY_PATTERN: &str = "[^U]";
 
-type Reducer = for<'a> fn(&[Node<'a>]) -> Result<(Node<'a>, usize), ()>;
+type Reducer = for<'a> fn(&[Node<'a>]) -> (Node<'a>, usize);
 
 fn filter_parsed<'a>(nodes: &[Node<'a>]) -> (Vec<Node<'a>>, Span, usize) {
     let size = nodes.len();
@@ -30,40 +29,39 @@ fn filter_parsed<'a>(nodes: &[Node<'a>]) -> (Vec<Node<'a>>, Span, usize) {
     (new_nodes, span, size)
 }
 
-fn choice<'a>(nodes: &[Node<'a>]) -> Result<(Node<'a>, usize), ()> {
+fn choice<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
     let (new_nodes, span, size) = filter_parsed(nodes);
 
     let payload = NodePayload::Choice(new_nodes);
-    Ok((Node { span, payload }, size))
+    (Node { span, payload }, size)
 }
 
-fn option<'a>(nodes: &[Node<'a>]) -> Result<(Node<'a>, usize), ()> {
+fn option<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
     let (new_nodes, span, size) = filter_parsed(nodes);
 
     let payload = NodePayload::Optional(new_nodes);
-    Ok((Node { span, payload }, size))
+    (Node { span, payload }, size)
 }
 
-fn repeat<'a>(nodes: &[Node<'a>]) -> Result<(Node<'a>, usize), ()> {
+fn repeat<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
     let (new_nodes, span, size) = filter_parsed(nodes);
 
     let payload = if let NodePayload::UnparsedToken(t) = nodes.last().unwrap().payload {
         match TokenKind::from(t) {
-            TokenKind::Kleene => NodePayload::Repeated(new_nodes),
-            TokenKind::Repeat => NodePayload::Repeated(new_nodes),
+            TokenKind::Kleene | TokenKind::Repeat => NodePayload::Repeated(new_nodes),
             t => unreachable!("{t}"),
         }
     } else {
         unreachable!()
     };
-    Ok((Node { span, payload }, size))
+    (Node { span, payload }, size)
 }
 
-fn list<'a>(nodes: &[Node<'a>]) -> Result<(Node<'a>, usize), ()> {
+fn list<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
     let (new_nodes, span, size) = filter_parsed(nodes);
 
     let payload = NodePayload::List(new_nodes);
-    Ok((Node { span, payload }, size))
+    (Node { span, payload }, size)
 }
 
 fn decode_rule_regex(pat: &str) -> Regex {
@@ -79,20 +77,20 @@ fn decode_rule_regex(pat: &str) -> Regex {
     Regex::new(&s).unwrap()
 }
 
-fn rule<'a>(nodes: &[Node<'a>]) -> Result<(Node<'a>, usize), ()> {
+fn rule<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
     let size = nodes.len();
     let span = nodes.iter().map(|n| n.span).reduce(Span::union).unwrap();
     //let
 
-    let [name, equals, body @ .., term] = nodes else {
+    let [name, _equals, body @ .., _term] = nodes else {
         unreachable!()
     };
 
     let payload = NodePayload::Rule(Rule {
         name: Box::new(name.clone()),
-        body: Vec::from_iter(body.iter().cloned()),
+        body: body.iter().cloned().collect(),
     });
-    Ok((Node { span, payload }, size))
+    (Node { span, payload }, size)
 }
 
 const PATTERNS: [(&str, Reducer); 7] = const {
@@ -106,10 +104,6 @@ const PATTERNS: [(&str, Reducer); 7] = const {
         (r"Nonterminal = Any+;", rule),
     ]
 };
-
-fn shift_token<'a>(stack: &mut LrStack<'a>, t: Token<'a>) {
-    stack.push_token(t);
-}
 
 fn shiftreduce<'a>(stack: &mut LrStack<'a>, input: &mut LexedInput<'a, '_>) {
     let regex_pattern = PATTERNS.map(|(p, f)| (decode_rule_regex(p), f));
@@ -133,7 +127,7 @@ fn shiftreduce<'a>(stack: &mut LrStack<'a>, input: &mut LexedInput<'a, '_>) {
                     // dbg!(&stack.token_pattern);
                     let nodes = stack.get(range).unwrap();
                     //dbg!(&nodes);
-                    let (replacement, consumed) = f(nodes).unwrap();
+                    let (replacement, consumed) = f(nodes);
                     stack.drop_many(consumed);
                     stack.push_node(replacement);
                     shift = false;

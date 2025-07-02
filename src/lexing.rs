@@ -93,7 +93,7 @@ pub(crate) fn tokenize(mut input: RawInput<'_>) -> Result<TokenStore<'_>, EbnfEr
 mod test {
     use ariadne::{Label, Source};
     use insta::assert_compact_debug_snapshot;
-    use proptest::test_runner::TestRunner;
+
     use winnow::LocatingSlice;
 
     use crate::{error::BracketingError, token_data::Span};
