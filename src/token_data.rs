@@ -1,39 +1,80 @@
-use std::{fmt::Debug, ops::Deref};
+use std::{
+    borrow::Borrow,
+    fmt::{Debug, Display},
+    iter::IntoIterator,
+    ops::Deref,
+    vec::Vec,
+};
 
 use arrayvec::ArrayVec;
+use display_tree::DisplayTree;
 use strum::{Display, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantArray};
 use winnow::{
     Parser,
-    error::{ContextError, ParserError},
-    stream::{Accumulate, Stream, TokenSlice},
+    error::ContextError,
+    stream::{Stream, TokenSlice},
 };
 
 use crate::{
-    Span,
-    error::{TokenContext, TokenError},
+    //    container::Vec,
+    error::{InternalErrorType, TokenError},
 };
 
-// Inherit lots of winnow machinery for the view into the tokens
-pub(crate) type LexedInput<'a> = TokenSlice<'a, Token<'a>>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Span {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+}
 
-#[derive(Clone, Copy, Eq)]
+impl Span {
+    pub(crate) fn union(s: Span, t: Span) -> Span {
+        Span {
+            start: s.start.min(t.start),
+            end: s.end.max(t.end),
+        }
+    }
+}
+
+impl Display for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Span { start, end } = self;
+        write!(f, "[{start}..{end}]")
+    }
+}
+
+// Inherit lots of winnow machinery for the view into the tokens
+// The raw original input lives longer than the stored tokens
+// The borrow checker ought to be able to merge both of these but seems to get confused by &mut Lexed showing up all the time
+pub(crate) type LexedInput<'input, 'storage> = TokenSlice<'storage, Token<'input>>;
+
+#[derive(Clone, Copy, Eq, DisplayTree)]
 pub(crate) struct Token<'a> {
     pub(crate) span: Span,
     pub(crate) payload: TokenPayload<'a>,
 }
 
+impl Display for Token<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
 impl Debug for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use TokenPayload::*;
-        let kind = TokenKind::from(self.payload);
-        let (start, end) = self.span;
-        write!(f, "{kind}[{start},{end}]")?;
-        match self.payload {
-            Identifier(s) | Whitespace(s) | String(s) => write!(f, "(\"{}\")", s.escape_debug())?,
-            Equals | Termination | Alternation | Optional | OpeningGroup | ClosingGroup
-            | OpeningSquare | ClosingSquare | Newline => {}
-        };
-        Ok(())
+        let kind = self.payload.kind();
+        let span = &self.span;
+        //let Span { start, end } = self.span;
+        write!(f, "{kind} {span}")?;
+        match &self.payload {
+            Regex(s) | Identifier(s) | Whitespace(s) | String(s) => {
+                write!(f, "(\"{}\")", s.escape_debug())
+            }
+            Kleene | Repeat | Equals | Termination | Alternation | Optional | OpeningGroup
+            | ClosingGroup | OpeningSquare | ClosingSquare | Newline => Ok(()),
+        }
+
+        //Ok(())
     }
 }
 
@@ -44,36 +85,65 @@ impl PartialEq for Token<'_> {
 }
 
 #[derive(EnumDiscriminants, IntoStaticStr, EnumProperty)]
-#[strum_discriminants(
-    name(TokenKind),
-    derive(IntoStaticStr, VariantArray, Display, PartialOrd, Ord)
-)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[strum_discriminants(name(TokenKind), derive(VariantArray, Display, PartialOrd, Ord))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenPayload<'a> {
     Identifier(&'a str),
+    #[strum(props(string = "="))]
     Equals,
+    #[strum(props(string = ";"))]
     Termination,
+    #[strum(props(string = "|"))]
     Alternation,
+    #[strum(props(string = "?"))]
     Optional,
+    #[strum(props(string = "*"))]
+    Kleene,
+    #[strum(props(string = "+"))]
+    Repeat,
     String(&'a str),
+    Regex(&'a str),
+    #[strum(props(string = "("))]
     OpeningGroup,
+    #[strum(props(string = ")"))]
     ClosingGroup,
+    #[strum(props(string = "["))]
     OpeningSquare,
+    #[strum(props(string = "]"))]
     ClosingSquare,
     #[strum(props(trivial = true))]
     Whitespace(&'a str),
+    #[strum(props(string = "\n", trivial = true))]
     Newline,
 }
 
-impl<'a> Parser<LexedInput<'a>, Token<'a>, TokenContext> for TokenKind {
-    fn parse_next(&mut self, input: &mut LexedInput<'a>) -> Result<Token<'a>, TokenContext> {
+impl Display for TokenPayload<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl TokenPayload<'_> {
+    fn kind(&self) -> TokenKind {
+        TokenKind::from(self)
+    }
+}
+
+impl<'a, 'b> Parser<LexedInput<'a, 'b>, Token<'a>, ContextError<InternalErrorType<'a>>>
+    for TokenKind
+{
+    fn parse_next(
+        &mut self,
+        input: &mut LexedInput<'a, 'b>,
+    ) -> Result<Token<'a>, ContextError<InternalErrorType<'a>>> {
         TokenSet(ArrayVec::from_iter([*self])).parse_next(input)
     }
 }
 
-impl From<Token<'_>> for TokenKind {
-    fn from(value: Token<'_>) -> Self {
-        value.payload.into()
+impl<'a, B: Borrow<Token<'a>>> From<B> for TokenKind {
+    fn from(value: B) -> Self {
+        let p: &TokenPayload = &value.borrow().payload;
+        TokenKind::from(p)
     }
 }
 
@@ -95,57 +165,64 @@ impl TokenSet {
     }
 }
 
-impl<'input> Parser<LexedInput<'input>, Token<'input>, TokenContext> for TokenSet {
+impl<'input, 'b>
+    Parser<LexedInput<'input, 'b>, Token<'input>, ContextError<InternalErrorType<'input>>>
+    for TokenSet
+{
     fn parse_next(
         &mut self,
-        input: &mut LexedInput<'input>,
-    ) -> Result<Token<'input>, TokenContext> {
-        let TokenSet(token_set) = self;
-        match input.next_token() {
-            Some(tok) if token_set.contains(&TokenKind::from(tok.payload)) => Ok(*tok),
+        input: &mut LexedInput<'input, 'b>,
+    ) -> Result<Token<'input>, ContextError<InternalErrorType<'input>>> {
+        let TokenSet(token_set) = self.clone();
+        let ie: Result<Token<'input>, InternalErrorType> = match input.next_token() {
+            Some(tok) if token_set.contains(&tok.payload.kind()) => Ok(*tok),
             Some(tok) => Err(TokenError {
-                expected: TokenSet::new(token_set),
-                found: Some(tok.payload.into()),
-            }),
+                expected: TokenSet::new(&token_set),
+                found: Some(*tok),
+            }
+            .into()),
             None => Err(TokenError {
-                expected: TokenSet::new(token_set),
+                expected: TokenSet::new(&token_set),
                 found: None,
-            }),
-        }
-        .map_err(|e| {
-            let mut ctx = ContextError::new();
-            ctx.push(e);
-            ctx
-        })
+            }
+            .into()),
+        };
+        Ok(ie?)
     }
 }
 
 /// An owning buffer of Tokens, where most `LexedInput` is going to be pointing to.
 /// This has an explicit name so there's some control over what interface it has because at some point
-/// it'll need generalized for no_std
+/// it'll need generalized for ``no_std``
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct TokenStore<'a>(Vec<Token<'a>>);
+pub(crate) struct TokenStore<'a>(pub(crate) Vec<Token<'a>>);
 
-impl<'a> TokenStore<'a> {
-    pub(crate) fn accumulator<P, I, E>(
-        repeater: winnow::combinator::Repeat<P, I, Token<'a>, (), E>,
-    ) -> impl Parser<I, TokenStore<'a>, E>
-    where
-        P: Parser<I, Token<'a>, E>,
-        I: Stream,
-        E: ParserError<I>,
-    {
-        repeater.fold(
-            || TokenStore(vec![]),
-            |mut store, token| {
-                if token.payload.get_bool("trivial").is_none() {
-                    store.0.push(token);
-                }
-                store
-            },
-        )
+impl TokenStore<'_> {
+    pub(crate) fn new(data: Vec<Token<'_>>) -> TokenStore<'_> {
+        TokenStore(data)
     }
 }
+
+// impl<'a> TokenStore<'a> {
+//     pub(crate) fn accumulator<P, I, E>(
+//         repeater: winnow::combinator::Repeat<P, I, Token<'a>, (), E>,
+//     ) -> impl Parser<I, TokenStore<'a>, E>
+//     where
+//         P: Parser<I, Token<'a>, E>,
+//         I: Stream,
+//         E: ParserError<I>,
+//     {
+//         repeater.fold(
+//             || TokenStore(Vec::new()),
+//             |mut store, token| {
+//                 if token.payload.get_bool("trivial").is_none() {
+//                     store.0.push(token);
+//                 }
+//                 store
+//             },
+//         )
+//     }
+// }
 
 impl<'a> Deref for TokenStore<'a> {
     type Target = [Token<'a>];
@@ -154,18 +231,24 @@ impl<'a> Deref for TokenStore<'a> {
     }
 }
 
-impl<'a> Accumulate<Token<'a>> for TokenStore<'a> {
-    fn initial(capacity: Option<usize>) -> Self {
-        TokenStore(Vec::with_capacity(capacity.unwrap_or(0)))
-    }
-
-    fn accumulate(&mut self, acc: Token<'a>) {
-        self.0.push(acc);
+impl<'a> IntoIterator for TokenStore<'a> {
+    type Item = Token<'a>;
+    type IntoIter = <Vec<Token<'a>> as IntoIterator>::IntoIter;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
-// Exists for readability, to resemble `one_of`
-#[inline(always)]
-pub(crate) fn any_token(slice: &[TokenKind]) -> TokenSet {
-    TokenSet::new(slice)
+impl<'a, 'b> IntoIterator for &'b TokenStore<'a> {
+    type Item = &'b Token<'a>;
+    type IntoIter = <&'b Vec<Token<'a>> as IntoIterator>::IntoIter;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
 }
+
+// // Exists for readability, to resemble `one_of`
+// #[inline]
+// pub(crate) fn any_token(slice: &[TokenKind]) -> TokenSet {
+//     TokenSet::new(slice)
+// }
