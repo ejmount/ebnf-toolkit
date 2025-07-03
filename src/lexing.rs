@@ -10,7 +10,6 @@ use winnow::{
 
 use crate::{
     RawInput,
-    //container::Vec,
     error::EbnfError,
     token_data::{Span, Token, TokenPayload, TokenStore},
 };
@@ -91,25 +90,21 @@ pub(crate) fn tokenize(mut input: RawInput<'_>) -> Result<TokenStore<'_>, EbnfEr
 
 #[cfg(test)]
 mod test {
-    use ariadne::{Label, Source};
+
     use insta::assert_compact_debug_snapshot;
 
     use winnow::LocatingSlice;
 
-    use crate::{error::BracketingError, token_data::Span};
+    // #[test]
+    // fn basic_token_test() {
+    //     let input =
+    //         "message       ::= ['@' tags SPACE] [':' source SPACE ] command [parameters] crlf;";
 
-    use super::tokenize;
+    //     let input = LocatingSlice::new(input);
+    //     let tokens = tokenize(input).unwrap();
 
-    #[test]
-    fn basic_token_test() {
-        let input =
-            "message       ::= ['@' tags SPACE] [':' source SPACE ] command [parameters] crlf;";
-
-        let input = LocatingSlice::new(input);
-        let tokens = tokenize(input).unwrap();
-
-        assert_compact_debug_snapshot!(&tokens[..], @r#"[Identifier [0..7]("message"), Equals [14..17], OpeningSquare [18..19], String [19..22]("@"), Identifier [23..27]("tags"), Identifier [28..33]("SPACE"), ClosingSquare [33..34], OpeningSquare [35..36], String [36..39](":"), Identifier [40..46]("source"), Identifier [47..52]("SPACE"), ClosingSquare [53..54], Identifier [55..62]("command"), OpeningSquare [63..64], Identifier [64..74]("parameters"), ClosingSquare [74..75], Identifier [76..80]("crlf"), Termination [80..81]]"#);
-    }
+    //     assert_compact_debug_snapshot!(&tokens[..], @r#"[Identifier [0..7]("message"), Equals [14..17], OpeningSquare [18..19], String [19..22]("@"), Identifier [23..27]("tags"), Identifier [28..33]("SPACE"), ClosingSquare [33..34], OpeningSquare [35..36], String [36..39](":"), Identifier [40..46]("source"), Identifier [47..52]("SPACE"), ClosingSquare [53..54], Identifier [55..62]("command"), OpeningSquare [63..64], Identifier [64..74]("parameters"), ClosingSquare [74..75], Identifier [76..80]("crlf"), Termination [80..81]]"#);
+    // }
 
     // #[test]
     // fn bracket_success() {

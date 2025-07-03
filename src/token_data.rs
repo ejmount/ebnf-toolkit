@@ -2,12 +2,13 @@ use std::{
     borrow::Borrow,
     fmt::{Debug, Display},
     iter::IntoIterator,
-    ops::Deref,
+    ops::{Deref, Range},
     vec::Vec,
 };
 
 use arrayvec::ArrayVec;
 use display_tree::DisplayTree;
+use logos::{Lexer, Logos};
 use strum::{Display, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantArray};
 use winnow::{
     Parser,
@@ -17,6 +18,7 @@ use winnow::{
 
 use crate::{
     //    container::Vec,
+    container::MyVec,
     error::{InternalErrorType, TokenError},
 };
 
@@ -24,6 +26,12 @@ use crate::{
 pub(crate) struct Span {
     pub(crate) start: usize,
     pub(crate) end: usize,
+}
+
+impl From<Range<usize>> for Span {
+    fn from(Range { start, end }: Range<usize>) -> Self {
+        Span { start, end }
+    }
 }
 
 impl Span {
@@ -86,30 +94,45 @@ impl PartialEq for Token<'_> {
 
 #[derive(EnumDiscriminants, IntoStaticStr, EnumProperty)]
 #[strum_discriminants(name(TokenKind), derive(VariantArray, Display, PartialOrd, Ord))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Logos)]
+#[logos(skip r"[[:space:]]")]
 pub enum TokenPayload<'a> {
+    #[regex("[A-Za-z_][A-Za-z0-9_]*")]
     Identifier(&'a str),
     #[strum(props(string = "="))]
+    #[token("=")]
+    #[token("::=")]
     Equals,
     #[strum(props(string = ";"))]
+    #[token(";")]
     Termination,
     #[strum(props(string = "|"))]
+    #[token("|")]
     Alternation,
     #[strum(props(string = "?"))]
+    #[token("?")]
     Optional,
     #[strum(props(string = "*"))]
+    #[token("*")]
     Kleene,
     #[strum(props(string = "+"))]
+    #[token("+")]
     Repeat,
+    #[regex("'[^']+'", |l| &l.slice()[1..l.slice().len()-1])]
     String(&'a str),
+    #[regex("#\".+\"", |l| &l.slice()[2..l.slice().len()-1])]
     Regex(&'a str),
     #[strum(props(string = "("))]
+    #[token("(")]
     OpeningGroup,
     #[strum(props(string = ")"))]
+    #[token(")")]
     ClosingGroup,
     #[strum(props(string = "["))]
+    #[token("[")]
     OpeningSquare,
     #[strum(props(string = "]"))]
+    #[token("]")]
     ClosingSquare,
     #[strum(props(trivial = true))]
     Whitespace(&'a str),

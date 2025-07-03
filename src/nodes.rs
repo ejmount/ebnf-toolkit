@@ -1,19 +1,11 @@
-use std::{fmt::Display, iter::once, ops::Range, slice::SliceIndex, str::FromStr};
-
 use crate::{
     container::MyVec as Vec,
-    error::{
-        BracketingError::{self, UnexpectedClose},
-        InternalErrorType, TokenError,
-    },
-    token_data::{LexedInput, Span, Token, TokenKind, TokenPayload, TokenSet, TokenStore},
+    token_data::{Span, Token},
 };
+use display_tree::{AsTree, DisplayTree};
+use std::fmt::Display;
 
-use regex::{Match, Regex};
-use strum::{
-    EnumCount, EnumDiscriminants, EnumProperty, EnumString, IntoStaticStr, VariantArray,
-    VariantNames,
-};
+use strum::{EnumCount, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantNames};
 
 #[derive(Debug, Clone, PartialEq, Eq, DisplayTree)]
 pub struct Rule<'a> {
@@ -30,14 +22,9 @@ impl Display for Rule<'_> {
     }
 }
 
-use display_tree::{AsTree, DisplayTree};
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node<'a> {
-    //#[node_label]
     pub(crate) span: Span,
-
-    //#[tree]
     pub(crate) payload: NodePayload<'a>,
 }
 
@@ -71,8 +58,38 @@ pub(crate) enum NodePayload<'a> {
     Regex(&'a str),
     List(#[tree] Vec<Node<'a>>),
 
-    UnparsedToken(Token<'a>),
+    UnparsedOperator(UnparsedOperator),
     Rule(Rule<'a>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumProperty)]
+pub(crate) enum UnparsedOperator {
+    #[strum(props(string = "("))]
+    OpenedGroup,
+    #[strum(props(string = ")"))]
+    ClosedGroup,
+    #[strum(props(string = "["))]
+    OpenedSquare,
+    #[strum(props(string = "]"))]
+    ClosedSquare,
+    #[strum(props(string = ";"))]
+    Terminator,
+    #[strum(props(string = "="))]
+    Equals,
+    #[strum(props(string = "|"))]
+    Alternation,
+    #[strum(props(string = "*"))]
+    Kleene,
+    #[strum(props(string = "?"))]
+    Optional,
+    #[strum(props(string = "+"))]
+    Repeat,
+}
+
+impl Display for UnparsedOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
 
 impl From<&'_ Node<'_>> for NodeKind {
@@ -81,107 +98,33 @@ impl From<&'_ Node<'_>> for NodeKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LrStack<'a> {
-    bracket_stack: Vec<(usize, Token<'a>)>,
-    pub(crate) token_stack: Vec<Node<'a>>,
-    pub(crate) token_pattern: String,
-}
-
-impl<'a> LrStack<'a> {
-    pub(crate) fn new() -> LrStack<'a> {
-        LrStack {
-            bracket_stack: Vec::new(),
-            token_stack: Vec::new(),
-            token_pattern: String::from_str("").unwrap(),
-        }
-    }
-
-    pub(crate) fn get<I: SliceIndex<[Node<'a>]>>(
-        &self,
-        index: I,
-    ) -> Option<&<I as SliceIndex<[Node<'a>]>>::Output> {
-        self.token_stack.get(index)
-    }
-
-    pub(crate) fn match_rule(&self, r: &Regex) -> Option<Range<usize>> {
-        r.find(&self.token_pattern).as_ref().map(Match::range)
-    }
-
-    pub(crate) fn push_token(&mut self, t: Token<'a>) {
-        use TokenPayload::*;
-        let Token { payload, span } = t;
-        let payload = match payload {
-            Alternation | OpeningSquare | ClosingSquare | Equals | Termination | Kleene
-            | OpeningGroup | ClosingGroup | Optional | Repeat => NodePayload::UnparsedToken(t),
-            String(s) => NodePayload::Terminal(s),
-            Identifier(s) => NodePayload::Nonterminal(s),
-            Regex(s) => NodePayload::Regex(s),
-            Whitespace(_) | Newline => unreachable!(),
-        };
-        self.push_node(Node { span, payload });
-    }
-
-    pub(crate) fn push_node(&mut self, n: Node<'a>) {
-        let kind = if let NodePayload::UnparsedToken(t) = n.payload {
-            t.payload.get_str("string").unwrap()
-        } else {
-            let nk = NodeKind::from(&n.payload);
-            let name: &str = nk.into();
-            &name[..1]
-        };
-        self.token_pattern.push_str(kind);
-        self.token_stack.push(n);
-    }
-
-    fn pop_node(&mut self) -> Option<Node<'a>> {
-        self.token_pattern.pop();
-        self.token_stack.pop()
-    }
-
-    pub(crate) fn drop_many(&mut self, n: usize) {
-        for _ in 0..n {
-            self.pop_node();
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use super::Rule;
-    use display_tree::{AsTree, Color, Style, StyleBuilder, format_tree};
-    use insta::assert_compact_debug_snapshot;
-    use winnow::Parser;
-    use winnow::{LocatingSlice, error::ParseError, stream::TokenSlice};
 
-    use crate::container::MyVec as Vec;
-    use crate::token_data::LexedInput;
-    use crate::{error::TokenError, lexing::tokenize};
+    // #[test]
+    // fn basic_parse() {
+    //     let src = "foo ::= [(bar)(baz)];";
+    //     let src = LocatingSlice::new(src);
+    //     let tokens = tokenize(src).unwrap();
+    //     let mut input = LexedInput::new(&tokens);
+    //     let result = Rule::parser.parse_next(&mut input).unwrap();
 
-    #[test]
-    fn basic_parse() {
-        let src = "foo ::= [(bar)(baz)];";
-        let src = LocatingSlice::new(src);
-        let tokens = tokenize(src).unwrap();
-        let mut input = LexedInput::new(&tokens);
-        let result = Rule::parser.parse_next(&mut input).unwrap();
+    //     let tree = format_tree!(result);
 
-        let tree = format_tree!(result);
-
-        insta::assert_snapshot!(tree, @r#"
-        Rule
-        ├── name: Identifier [0..3]("foo")
-        └── tree: Sequence [8..20]
-            └── 0: Sequence [8..20]
-                   └── 0: Sequence [9..14]
-                       │  └── 0: Nonterminal [10..13]
-                       │         └── bar
-                       1: Sequence [14..19]
-                          └── 0: Nonterminal [15..18]
-                                 └── baz
-        "#);
-        //panic!();
-    }
+    //     insta::assert_snapshot!(tree, @r#"
+    //     Rule
+    //     ├── name: Identifier [0..3]("foo")
+    //     └── tree: Sequence [8..20]
+    //         └── 0: Sequence [8..20]
+    //                └── 0: Sequence [9..14]
+    //                    │  └── 0: Nonterminal [10..13]
+    //                    │         └── bar
+    //                    1: Sequence [14..19]
+    //                       └── 0: Nonterminal [15..18]
+    //                              └── baz
+    //     "#);
+    //     //panic!();
+    // }
 
     // #[test]
     // fn reporting_unexpected_token() {

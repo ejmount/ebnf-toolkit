@@ -1,5 +1,7 @@
-use regex::Regex;
-use strum::VariantNames;
+use std::{ops::Range, slice::SliceIndex, str::FromStr};
+
+use regex::{Match, Regex};
+use strum::{EnumProperty, VariantNames};
 use winnow::{
     LocatingSlice,
     stream::{Stream, TokenSlice},
@@ -8,61 +10,25 @@ use winnow::{
 use crate::{
     container::MyVec as Vec,
     lexing::tokenize,
-    nodes::{LrStack, Node, NodeKind, NodePayload, Rule},
-    token_data::{LexedInput, Span, TokenKind, TokenStore},
+    nodes::{Node, NodeKind, NodePayload, UnparsedOperator},
+    token_data::{LexedInput, Token, TokenPayload, TokenStore},
 };
 
 const ANY_PATTERN: &str = "[^U]";
 
+const PATTERNS: [(&str, Reducer); 7] = const {
+    [
+        (r"Any (\| Any)+", rules::choice),
+        (r"\[Any+\]", rules::option),
+        (r"Any\?", rules::option),
+        (r"Any\*", rules::repeat),
+        (r"Any\+", rules::repeat),
+        (r"\(Any+\)", rules::list),
+        (r"Nonterminal = Any+;", rules::rule),
+    ]
+};
+
 type Reducer = for<'a> fn(&[Node<'a>]) -> (Node<'a>, usize);
-
-fn filter_parsed<'a>(nodes: &[Node<'a>]) -> (Vec<Node<'a>>, Span, usize) {
-    let size = nodes.len();
-    let span = nodes.iter().map(|n| n.span).reduce(Span::union).unwrap();
-    let new_nodes: Vec<Node<'_>> = nodes
-        .iter()
-        .filter(|n| NodeKind::UnparsedToken != (&n.payload).into())
-        .cloned()
-        .collect();
-
-    debug_assert!(!new_nodes.is_empty());
-    (new_nodes, span, size)
-}
-
-fn choice<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
-    let (new_nodes, span, size) = filter_parsed(nodes);
-
-    let payload = NodePayload::Choice(new_nodes);
-    (Node { span, payload }, size)
-}
-
-fn option<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
-    let (new_nodes, span, size) = filter_parsed(nodes);
-
-    let payload = NodePayload::Optional(new_nodes);
-    (Node { span, payload }, size)
-}
-
-fn repeat<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
-    let (new_nodes, span, size) = filter_parsed(nodes);
-
-    let payload = if let NodePayload::UnparsedToken(t) = nodes.last().unwrap().payload {
-        match TokenKind::from(t) {
-            TokenKind::Kleene | TokenKind::Repeat => NodePayload::Repeated(new_nodes),
-            t => unreachable!("{t}"),
-        }
-    } else {
-        unreachable!()
-    };
-    (Node { span, payload }, size)
-}
-
-fn list<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
-    let (new_nodes, span, size) = filter_parsed(nodes);
-
-    let payload = NodePayload::List(new_nodes);
-    (Node { span, payload }, size)
-}
 
 fn decode_rule_regex(pat: &str) -> Regex {
     let mut s = pat.replace(' ', "");
@@ -77,69 +43,185 @@ fn decode_rule_regex(pat: &str) -> Regex {
     Regex::new(&s).unwrap()
 }
 
-fn rule<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
-    let size = nodes.len();
-    let span = nodes.iter().map(|n| n.span).reduce(Span::union).unwrap();
-    //let
-
-    let [name, _equals, body @ .., _term] = nodes else {
-        unreachable!()
+mod rules {
+    use crate::{
+        container::MyVec as Vec,
+        nodes::{Node, NodeKind, NodePayload, Rule, UnparsedOperator},
+        token_data::Span,
     };
 
-    let payload = NodePayload::Rule(Rule {
-        name: Box::new(name.clone()),
-        body: body.iter().cloned().collect(),
-    });
-    (Node { span, payload }, size)
+    fn filter_parsed<'a>(nodes: &[Node<'a>]) -> (Vec<Node<'a>>, Span, usize) {
+        let size = nodes.len();
+        let span = nodes.iter().map(|n| n.span).reduce(Span::union).unwrap();
+        let new_nodes: Vec<Node<'_>> = nodes
+            .iter()
+            .filter(|n| NodeKind::UnparsedOperator != (&n.payload).into())
+            .cloned()
+            .collect();
+
+        debug_assert!(!new_nodes.is_empty());
+        (new_nodes, span, size)
+    }
+
+    pub(super) fn choice<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
+        let (new_nodes, span, size) = filter_parsed(nodes);
+
+        let payload = NodePayload::Choice(new_nodes);
+        (Node { span, payload }, size)
+    }
+
+    pub(super) fn option<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
+        let (new_nodes, span, size) = filter_parsed(nodes);
+
+        let payload = NodePayload::Optional(new_nodes);
+        (Node { span, payload }, size)
+    }
+
+    pub(super) fn repeat<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
+        let (new_nodes, span, size) = filter_parsed(nodes);
+
+        let payload = if let NodePayload::UnparsedOperator(o) = nodes.last().unwrap().payload {
+            match o {
+                UnparsedOperator::Kleene | UnparsedOperator::Repeat => {
+                    NodePayload::Repeated(new_nodes)
+                }
+                t => unreachable!(
+                    "Somehow encountered {t} at the end of a repeat block - this is a bug"
+                ),
+            }
+        } else {
+            unreachable!()
+        };
+        (Node { span, payload }, size)
+    }
+
+    pub(super) fn list<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
+        let (new_nodes, span, size) = filter_parsed(nodes);
+
+        let payload = NodePayload::List(new_nodes);
+        (Node { span, payload }, size)
+    }
+
+    pub(super) fn rule<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
+        let size = nodes.len();
+        let span = nodes.iter().map(|n| n.span).reduce(Span::union).unwrap();
+        //let
+
+        let [name, _equals, body @ .., _term] = nodes else {
+            unreachable!()
+        };
+
+        let payload = NodePayload::Rule(Rule {
+            name: Box::new(name.clone()),
+            body: body.iter().cloned().collect(),
+        });
+        (Node { span, payload }, size)
+    }
 }
 
-const PATTERNS: [(&str, Reducer); 7] = const {
-    [
-        (r"Any (\| Any)+", choice),
-        (r"\[Any+\]", option),
-        (r"Any\?", option),
-        (r"Any\*", repeat),
-        (r"Any\+", repeat),
-        (r"\(Any+\)", list),
-        (r"Nonterminal = Any+;", rule),
-    ]
-};
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LrStack<'a> {
+    bracket_stack: Vec<(usize, Token<'a>)>,
+    pub(crate) token_stack: Vec<Node<'a>>,
+    pub(crate) token_pattern: String,
+}
 
-fn shiftreduce<'a>(stack: &mut LrStack<'a>, input: &mut LexedInput<'a, '_>) {
-    let regex_pattern = PATTERNS.map(|(p, f)| (decode_rule_regex(p), f));
+impl<'a> LrStack<'a> {
+    pub(crate) fn new() -> LrStack<'a> {
+        LrStack {
+            bracket_stack: Vec::new(),
+            token_stack: Vec::new(),
+            token_pattern: String::from_str("").unwrap(),
+        }
+    }
 
-    loop {
-        let mut shift = true;
-        for (r, f) in &regex_pattern {
-            //dbg!(&r.as_str());
-            if let Some(range) = stack.match_rule(r) {
-                //dbg!(r.as_str(), &range);
-                let lookahead_pass = if let Some(t) = input.first() {
-                    stack.push_token(*t);
-                    let r = stack.match_rule(r).is_some();
-                    stack.drop_many(1);
-                    r
-                } else {
-                    false
-                };
-                if !lookahead_pass {
-                    // dbg!(&stack.token_stack.len());
-                    // dbg!(&stack.token_pattern);
-                    let nodes = stack.get(range).unwrap();
-                    //dbg!(&nodes);
-                    let (replacement, consumed) = f(nodes);
-                    stack.drop_many(consumed);
-                    stack.push_node(replacement);
-                    shift = false;
-                    break;
+    pub(crate) fn get<I: SliceIndex<[Node<'a>]>>(
+        &self,
+        index: I,
+    ) -> Option<&<I as SliceIndex<[Node<'a>]>>::Output> {
+        self.token_stack.get(index)
+    }
+
+    pub(crate) fn match_rule(&self, r: &Regex) -> Option<Range<usize>> {
+        r.find(&self.token_pattern).as_ref().map(Match::range)
+    }
+
+    pub(crate) fn push_token(&mut self, t: Token<'a>) {
+        use TokenPayload::*;
+        let Token { payload, span } = t;
+        let payload = match payload {
+            Alternation => NodePayload::UnparsedOperator(UnparsedOperator::Alternation),
+            OpeningSquare => NodePayload::UnparsedOperator(UnparsedOperator::OpenedSquare),
+            ClosingSquare => NodePayload::UnparsedOperator(UnparsedOperator::ClosedSquare),
+            Equals => NodePayload::UnparsedOperator(UnparsedOperator::Equals),
+            Termination => NodePayload::UnparsedOperator(UnparsedOperator::Terminator),
+            Kleene => NodePayload::UnparsedOperator(UnparsedOperator::Kleene),
+            OpeningGroup => NodePayload::UnparsedOperator(UnparsedOperator::OpenedGroup),
+            ClosingGroup => NodePayload::UnparsedOperator(UnparsedOperator::ClosedGroup),
+            Optional => NodePayload::UnparsedOperator(UnparsedOperator::Optional),
+            Repeat => NodePayload::UnparsedOperator(UnparsedOperator::Repeat),
+            String(s) => NodePayload::Terminal(s),
+            Identifier(s) => NodePayload::Nonterminal(s),
+            Regex(s) => NodePayload::Regex(s),
+            Whitespace(_) | Newline => unreachable!(),
+        };
+        self.push_node(Node { span, payload });
+    }
+
+    pub(crate) fn push_node(&mut self, n: Node<'a>) {
+        let kind = if let NodePayload::UnparsedOperator(o) = n.payload {
+            o.get_str("string").unwrap()
+        } else {
+            let nk = NodeKind::from(&n.payload);
+            let name: &str = nk.into();
+            &name[..1]
+        };
+        self.token_pattern.push_str(kind);
+        self.token_stack.push(n);
+    }
+
+    fn pop_node(&mut self) -> Option<Node<'a>> {
+        self.token_pattern.pop();
+        self.token_stack.pop()
+    }
+
+    pub(crate) fn drop_many(&mut self, n: usize) {
+        for _ in 0..n {
+            self.pop_node();
+        }
+    }
+
+    fn shiftreduce(&mut self, input: &mut LexedInput<'a, '_>) {
+        let regex_pattern = PATTERNS.map(|(p, f)| (decode_rule_regex(p), f));
+
+        loop {
+            let mut shift = true;
+            for (r, f) in &regex_pattern {
+                if let Some(range) = self.match_rule(r) {
+                    let lookahead_pass = if let Some(t) = input.first() {
+                        self.push_token(*t);
+                        let r = self.match_rule(r).is_some();
+                        self.drop_many(1);
+                        r
+                    } else {
+                        false
+                    };
+                    if !lookahead_pass {
+                        let nodes = self.get(range).unwrap();
+                        let (replacement, consumed) = f(nodes);
+                        self.drop_many(consumed);
+                        self.push_node(replacement);
+                        shift = false;
+                        break;
+                    }
                 }
             }
-        }
-        if shift {
-            if let Some(t) = input.next_token() {
-                stack.push_token(*t);
-            } else {
-                break;
+            if shift {
+                if let Some(t) = input.next_token() {
+                    self.push_token(*t);
+                } else {
+                    break;
+                }
             }
         }
     }
@@ -154,7 +236,7 @@ pub(crate) fn file_reduce() {
         let TokenStore(tokens) = tokenize(locating).unwrap();
         let mut input = TokenSlice::new(tokens.get(..).unwrap());
         let mut stack = LrStack::new();
-        shiftreduce(&mut stack, &mut input);
+        stack.shiftreduce(&mut input);
         for n in stack.get(..).unwrap() {
             display_tree::println_tree!(*n);
         }
@@ -167,7 +249,6 @@ mod tests {
 
     use crate::{
         lexing::tokenize,
-        nodes::LrStack,
         parser::{PATTERNS, decode_rule_regex, shiftreduce},
         token_data::TokenStore,
     };
@@ -175,25 +256,25 @@ mod tests {
     #[test]
     fn decode_test() {
         for (k, p) in PATTERNS {
-            println!("{k} => {}", decode_rule_regex(k).as_str())
+            println!("{k} => {}", decode_rule_regex(k).as_str());
         }
     }
 
-    #[test]
-    fn reduce_test() {
-        //let src = "  'A' | 'B' | 'C'  ";
-        let src = "A = ['A' 'B' 'C'];";
-        let locating = LocatingSlice::new(src);
-        let TokenStore(tokens) = tokenize(locating).unwrap();
+    // #[test]
+    // fn reduce_test() {
+    //     //let src = "  'A' | 'B' | 'C'  ";
+    //     let src = "A = ['A' 'B' 'C'];";
+    //     let locating = LocatingSlice::new(src);
+    //     let TokenStore(tokens) = tokenize(locating).unwrap();
 
-        let mut input = TokenSlice::new(tokens.get(..).unwrap());
+    //     let mut input = TokenSlice::new(tokens.get(..).unwrap());
 
-        let mut stack = LrStack::new();
+    //     let mut stack = LrStack::new();
 
-        shiftreduce(&mut stack, &mut input);
+    //     shiftreduce(&mut stack, &mut input);
 
-        for n in stack.get(..).unwrap() {
-            display_tree::println_tree!(*n);
-        }
-    }
+    //     for n in stack.get(..).unwrap() {
+    //         display_tree::println_tree!(*n);
+    //     }
+    // }
 }

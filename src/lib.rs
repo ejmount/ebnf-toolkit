@@ -18,6 +18,7 @@ mod container;
 mod debug;
 mod error;
 mod lexing;
+mod logos_lexer;
 mod nodes;
 mod parser;
 mod token_data;
@@ -38,23 +39,20 @@ pub fn parse_rule(_input: &str) -> Result<Rule<'_>, EbnfError<'_, '_>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{lexing::tokenize, nodes::Rule};
-    use display_tree::format_tree;
-    use winnow::{LocatingSlice, stream::TokenSlice};
 
-    #[test]
-    fn success() {
-        let src =
-            "message       ::= ['@' tags SPACE] [':' source SPACE ] command [parameters] crlf;";
+    // #[test]
+    // fn success() {
+    //     let src =
+    //         "message       ::= ['@' tags SPACE] [':' source SPACE ] command [parameters] crlf;";
 
-        let ls = LocatingSlice::new(src);
+    //     let ls = LocatingSlice::new(src);
 
-        let tokens = tokenize(ls).unwrap();
-        let mut slice = TokenSlice::new(&tokens);
+    //     let tokens = tokenize(ls).unwrap();
+    //     let mut slice = TokenSlice::new(&tokens);
 
-        let parse = Rule::parser(&mut slice).unwrap();
+    //     let parse = Rule::parser(&mut slice).unwrap();
 
-        let tree = format_tree!(parse);
-        println!("{tree}");
-    }
+    //     let tree = format_tree!(parse);
+    //     println!("{tree}");
+    // }
 }

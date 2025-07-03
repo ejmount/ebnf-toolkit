@@ -3,9 +3,15 @@ use std::fmt::Display;
 
 use display_tree::{AsTree, DisplayTree};
 
-use crate::container::MyVec;
+use crate::container::MyVec as Vec;
 
-impl<T: DisplayTree> DisplayTree for MyVec<T> {
+impl<T: DisplayTree> Display for Vec<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", AsTree::new(self))
+    }
+}
+
+impl<T: DisplayTree> DisplayTree for Vec<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter, style: display_tree::Style) -> std::fmt::Result {
         if self.is_empty() {
             return Ok(());
@@ -110,11 +116,5 @@ mod test {
         11: Nonterminal [0..0]
             └── nonterm_11
         ");
-    }
-}
-
-impl<T: DisplayTree> Display for MyVec<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", AsTree::new(self))
     }
 }

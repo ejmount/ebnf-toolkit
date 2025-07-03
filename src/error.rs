@@ -2,8 +2,8 @@ use std::{error::Error, fmt::Display};
 
 use crate::{
     RawInput,
-    //    container::Vec,
-    nodes::{LrStack, Node, NodeKind},
+    nodes::{Node, NodeKind},
+    parser::LrStack,
     token_data::{LexedInput, Span, Token, TokenKind, TokenSet, TokenStore},
 };
 use ariadne::{Label, Source};
@@ -13,17 +13,18 @@ use winnow::error::{ContextError, ErrMode, ParseError};
 pub enum EbnfError<'a, 'b> {
     LexError(ParseError<RawInput<'a>, ContextError>),
     LexError2(ErrMode<ContextError>, RawInput<'a>),
+    LexError3(&'a str),
     ParseError(ParseError<LexedInput<'a, 'b>, ContextError<TokenError<'a>>>),
     //MalformedInput(SyntaxError),
     Test1(ContextError<TokenError<'a>>),
     //Test2(ContextError<SyntaxError>),
 }
 
-impl<'a> From<ParseError<RawInput<'a>, ContextError>> for EbnfError<'a, '_> {
-    fn from(value: ParseError<RawInput<'a>, ContextError>) -> Self {
-        EbnfError::LexError(value)
-    }
-}
+// impl<'a> From<ParseError<RawInput<'a>, ContextError>> for EbnfError<'a, '_> {
+//     fn from(value: ParseError<RawInput<'a>, ContextError>) -> Self {
+//         EbnfError::LexError(value)
+//     }
+// }
 
 impl<'a, 'b> From<ParseError<LexedInput<'a, 'b>, ContextError<TokenError<'a>>>>
     for EbnfError<'a, 'b>
@@ -32,17 +33,18 @@ impl<'a, 'b> From<ParseError<LexedInput<'a, 'b>, ContextError<TokenError<'a>>>>
         EbnfError::ParseError(value)
     }
 }
-impl<'a> From<ContextError<TokenError<'a>>> for EbnfError<'_, '_> {
-    fn from(value: ContextError<TokenError<'a>>) -> Self {
-        todo!()
-    }
-}
 
-impl<'a> From<InternalErrorType<'a>> for EbnfError<'_, '_> {
-    fn from(value: InternalErrorType<'a>) -> Self {
-        todo!()
-    }
-}
+// impl<'a> From<ContextError<TokenError<'a>>> for EbnfError<'_, '_> {
+//     fn from(value: ContextError<TokenError<'a>>) -> Self {
+//         todo!()
+//     }
+// }
+
+// impl<'a> From<InternalErrorType<'a>> for EbnfError<'_, '_> {
+//     fn from(value: InternalErrorType<'a>) -> Self {
+//         todo!()
+//     }
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TokenError<'a> {
@@ -59,7 +61,7 @@ impl<'a> From<TokenError<'a>> for ContextError<TokenError<'a>> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct InternalError<'a> {
+pub(crate) struct InternalError<'a> {
     input: &'a str,
     kind: InternalErrorType<'a>,
 }
@@ -88,7 +90,7 @@ pub(crate) enum BracketingError {
     },
 }
 
-impl<'a> Display for InternalError<'a> {
+impl Display for InternalError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.kind {
             InternalErrorType::BracketingError(Span { start, end }, be) => {
@@ -101,16 +103,16 @@ impl<'a> Display for InternalError<'a> {
                     BracketingError::TypeMismatch { found, expected } => {
                         format!("Found: {found}, expected: {expected}")
                     }
-                    BracketingError::DanglingOpen(_t) => format!("Bracket never closed"),
+                    BracketingError::DanglingOpen(_t) => "Bracket never closed".to_string(),
                     _ => todo!(),
                 };
 
                 let s = Source::from(self.input.to_string());
 
                 let report =
-                    ariadne::Report::build(ariadne::ReportKind::Error, (0..self.input.len()))
+                    ariadne::Report::build(ariadne::ReportKind::Error, 0..self.input.len())
                         .with_message("Mismatched bracket")
-                        .with_label(Label::new((start..end)).with_color(c).with_message(text))
+                        .with_label(Label::new(start..end).with_color(c).with_message(text))
                         .finish();
 
                 report.write_for_stdout(s, &mut output).unwrap();
@@ -123,12 +125,12 @@ impl<'a> Display for InternalError<'a> {
     }
 }
 
-impl<'a> Error for InternalError<'a> {
+impl Error for InternalError<'_> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         None
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "description() is deprecated; use Display"
     }
 
@@ -159,7 +161,7 @@ impl<'a> From<InternalErrorType<'a>> for ContextError<InternalErrorType<'a>> {
 
 // pub(crate) type TokenContext = ContextError<TokenError<'a>>;
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PostfixError<'a>(pub Token<'a>);
+pub(crate) struct PostfixError<'a>(pub Token<'a>);
 
 // match bracketed_tokens {
 //     Ok(brackets) => ,
