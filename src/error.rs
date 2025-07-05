@@ -1,211 +1,61 @@
-use std::{error::Error, fmt::Display};
+use std::fmt::Display;
 
-use crate::{
-    RawInput,
-    nodes::{Node, NodeKind},
-    parser::LrStack,
-    token_data::{LexedInput, Span, Token, TokenKind, TokenSet, TokenStore},
-};
-use ariadne::{Label, Source};
-use winnow::error::{ContextError, ErrMode, ParseError};
+use crate::parser::LrStack;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum EbnfError<'a, 'b> {
-    LexError(ParseError<RawInput<'a>, ContextError>),
-    LexError2(ErrMode<ContextError>, RawInput<'a>),
-    LexError3(&'a str),
-    ParseError(ParseError<LexedInput<'a, 'b>, ContextError<TokenError<'a>>>),
-    //MalformedInput(SyntaxError),
-    Test1(ContextError<TokenError<'a>>),
-    //Test2(ContextError<SyntaxError>),
+#[non_exhaustive]
+pub enum EbnfError<'a> {
+    LexError { input: &'a str, offset: usize },
+    ParseError { input: &'a str, offset: usize },
+    EmptyInput,
+    //UnknownError(Vec<Node<'a>>),
 }
 
-// impl<'a> From<ParseError<RawInput<'a>, ContextError>> for EbnfError<'a, '_> {
-//     fn from(value: ParseError<RawInput<'a>, ContextError>) -> Self {
-//         EbnfError::LexError(value)
-//     }
-// }
-
-impl<'a, 'b> From<ParseError<LexedInput<'a, 'b>, ContextError<TokenError<'a>>>>
-    for EbnfError<'a, 'b>
-{
-    fn from(value: ParseError<LexedInput<'a, 'b>, ContextError<TokenError<'a>>>) -> Self {
-        EbnfError::ParseError(value)
+impl EbnfError<'_> {
+    pub(crate) fn from_parse_error<'a>(input: &'a str, stack: LrStack) -> EbnfError<'a> {
+        dbg!(input, stack);
+        todo!()
     }
 }
 
-// impl<'a> From<ContextError<TokenError<'a>>> for EbnfError<'_, '_> {
-//     fn from(value: ContextError<TokenError<'a>>) -> Self {
-//         todo!()
-//     }
-// }
-
-// impl<'a> From<InternalErrorType<'a>> for EbnfError<'_, '_> {
-//     fn from(value: InternalErrorType<'a>) -> Self {
-//         todo!()
-//     }
-// }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct TokenError<'a> {
-    pub expected: TokenSet,
-    pub found: Option<Token<'a>>,
-}
-
-impl<'a> From<TokenError<'a>> for ContextError<TokenError<'a>> {
-    fn from(value: TokenError<'a>) -> Self {
-        let mut ctx = ContextError::new();
-        ctx.push(value);
-        ctx
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub(crate) struct InternalError<'a> {
-    input: &'a str,
-    kind: InternalErrorType<'a>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub(crate) enum InternalErrorType<'a> {
-    TokenError(TokenError<'a>),
-    PostfixError(PostfixError<'a>),
-    UnparsedToken(Span),
-    BracketingError(Span, BracketingError),
-    UnexpectedSemicolon(Span),
-    UnexpectedNode {
-        expected: Vec<NodeKind>,
-        found: Option<Node<'a>>,
-    },
-    IncompleteParse(LrStack<'a>, TokenStore<'a>),
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub(crate) enum BracketingError {
-    DanglingOpen(TokenKind),
-    UnexpectedClose,
-    TypeMismatch {
-        found: TokenKind,
-        expected: TokenKind,
-    },
-}
-
-impl Display for InternalError<'_> {
+impl Display for EbnfError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.kind {
-            InternalErrorType::BracketingError(Span { start, end }, be) => {
-                //let input = format!("{}", self.input);
-                let mut output = vec![];
-                let mut cg = ariadne::ColorGenerator::new();
-                let c = cg.next();
+        use ariadne::{ColorGenerator, Label, Report, ReportKind, Source};
+        let input = match self {
+            EbnfError::LexError { input, .. } | EbnfError::ParseError { input, .. } => *input,
+            EbnfError::EmptyInput => return write!(f, "Input string was empty"),
+        };
 
-                let text = match be {
-                    BracketingError::TypeMismatch { found, expected } => {
-                        format!("Found: {found}, expected: {expected}")
-                    }
-                    BracketingError::DanglingOpen(_t) => "Bracket never closed".to_string(),
-                    _ => todo!(),
-                };
+        let s = Source::from(input);
 
-                let s = Source::from(self.input.to_string());
+        let mut colors = ColorGenerator::new();
 
-                let report =
-                    ariadne::Report::build(ariadne::ReportKind::Error, 0..self.input.len())
-                        .with_message("Mismatched bracket")
-                        .with_label(Label::new(start..end).with_color(c).with_message(text))
-                        .finish();
+        let col = colors.next();
 
-                report.write_for_stdout(s, &mut output).unwrap();
+        let mut report = Report::build(ReportKind::Error, ("", 0..input.len()));
 
-                write!(f, "{}", String::from_utf8(output).unwrap())?;
+        #[allow(clippy::range_plus_one)]
+        match self {
+            &EbnfError::LexError { offset, .. } => {
+                report = report.with_message("Tokenization error").with_label(
+                    Label::new(("", offset..1 + offset))
+                        .with_message("This was not recognised as the start of a valid token")
+                        .with_color(col),
+                );
+                if input.as_bytes()[offset] == b'\'' || input.as_bytes()[offset] == b'"' {
+                    report = report.with_note("Did you forget to close a string?");
+                }
             }
-            _ => unreachable!(),
+            _ => todo!(),
         }
+
+        let r = report.finish();
+
+        let mut output = vec![];
+
+        r.write(("", s), &mut output).unwrap();
+        write!(f, "{}", String::from_utf8(output).unwrap())?;
+
         Ok(())
     }
 }
-
-impl Error for InternalError<'_> {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-
-    fn description(&self) -> &'static str {
-        "description() is deprecated; use Display"
-    }
-
-    fn cause(&self) -> Option<&dyn Error> {
-        self.source()
-    }
-}
-
-impl<'a> From<PostfixError<'a>> for InternalErrorType<'a> {
-    fn from(value: PostfixError<'a>) -> Self {
-        InternalErrorType::PostfixError(value)
-    }
-}
-
-impl<'a> From<TokenError<'a>> for InternalErrorType<'a> {
-    fn from(value: TokenError<'a>) -> Self {
-        InternalErrorType::TokenError(value)
-    }
-}
-
-impl<'a> From<InternalErrorType<'a>> for ContextError<InternalErrorType<'a>> {
-    fn from(value: InternalErrorType<'a>) -> Self {
-        let mut ctx = ContextError::new();
-        ctx.push(value);
-        ctx
-    }
-}
-
-// pub(crate) type TokenContext = ContextError<TokenError<'a>>;
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PostfixError<'a>(pub Token<'a>);
-
-// match bracketed_tokens {
-//     Ok(brackets) => ,
-//     Err(crate::error::InternalError::BracketingError(Span { start, end }, b)) => {
-//         let mut cg = ariadne::ColorGenerator::new();
-//         let c = cg.next();
-
-//         let text = match b {
-//             BracketingError::TypeMismatch { found, expected } => {
-//                 format!("Found: {found}, expected: {expected}")
-//             }
-//             _ => todo!(),
-//         };
-
-//         let report = ariadne::Report::build(ariadne::ReportKind::Error, 0..SRC.len())
-//             .with_message("Mismatched bracket")
-//             .with_label(Label::new(start..end).with_color(c).with_message(text))
-//             .finish();
-
-//         report.eprint(Source::from(SRC));
-
-//         panic!();
-//     }
-//     e => unreachable!("{e:?}"),
-// }
-
-// pub(crate) enum InternalError<'a> {
-//     O(PhantomData<&'a ()>),
-// }
-
-// impl From<SyntaxError<'_>> for InternalError<'a> {
-//     fn from(value: SyntaxError<'_>) -> Self {
-//         todo!()
-//     }
-// }
-
-// impl From<TokenError<'a>> for InternalError<'a> {
-//     fn from(value: TokenError<'a>) -> Self {
-//         todo!()
-//     }
-// }
-
-// impl FromExternalError<LexedInput<'_>, SyntaxError<'_>> for InternalError<'a> {
-//     fn from_external_error(input: &LexedInput<'_>, e: SyntaxError<'_>) -> Self {
-//         todo!()
-//     }
-// }

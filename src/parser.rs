@@ -1,51 +1,46 @@
-use std::{ops::Range, slice::SliceIndex, str::FromStr};
+use std::{ops::Range, slice::SliceIndex, str::FromStr, sync::LazyLock};
 
 use regex::{Match, Regex};
 use strum::{EnumProperty, VariantNames};
-use winnow::{
-    LocatingSlice,
-    stream::{Stream, TokenSlice},
-};
 
 use crate::{
-    container::MyVec as Vec,
-    lexing::tokenize,
     nodes::{Node, NodeKind, NodePayload, UnparsedOperator},
-    token_data::{LexedInput, Token, TokenPayload, TokenStore},
+    token_data::{Token, TokenPayload},
 };
 
-const ANY_PATTERN: &str = "[^U]";
-
-const PATTERNS: [(&str, Reducer); 7] = const {
-    [
-        (r"Any (\| Any)+", rules::choice),
-        (r"\[Any+\]", rules::option),
-        (r"Any\?", rules::option),
-        (r"Any\*", rules::repeat),
-        (r"Any\+", rules::repeat),
-        (r"\(Any+\)", rules::list),
-        (r"Nonterminal = Any+;", rules::rule),
-    ]
-};
-
-type Reducer = for<'a> fn(&[Node<'a>]) -> (Node<'a>, usize);
-
+/// This is really just for better readibility in the raw pattern strings
 fn decode_rule_regex(pat: &str) -> Regex {
     let mut s = pat.replace(' ', "");
 
     for name in NodeKind::VARIANTS {
         s = s.replace(name, &name[..1]);
     }
-    s = s.replace("Any", ANY_PATTERN);
+    s = s.replace("Any", NON_OPERATOR);
 
     s.push('$');
 
     Regex::new(&s).unwrap()
 }
+// Any node, including compound nodes, that is not an operator
+const NON_OPERATOR: &str = "[A-Za-z]";
+
+//
+static REDUCTION_PATTERNS: LazyLock<[(Regex, Reducer); 7]> = LazyLock::new(|| {
+    [
+        (decode_rule_regex(r"Any (\| Any)+"), rules::choice),
+        (decode_rule_regex(r"\[Any+\]"), rules::option),
+        (decode_rule_regex(r"Any\?"), rules::option),
+        (decode_rule_regex(r"Any\*"), rules::repeat),
+        (decode_rule_regex(r"Any\+"), rules::repeat),
+        (decode_rule_regex(r"\(Any+\)"), rules::list),
+        (decode_rule_regex(r"Nonterminal = Any+;"), rules::rule),
+    ]
+});
+
+type Reducer = for<'a> fn(&[Node<'a>]) -> (Node<'a>, usize);
 
 mod rules {
     use crate::{
-        container::MyVec as Vec,
         nodes::{Node, NodeKind, NodePayload, Rule, UnparsedOperator},
         token_data::Span,
     };
@@ -105,15 +100,23 @@ mod rules {
     pub(super) fn rule<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
         let size = nodes.len();
         let span = nodes.iter().map(|n| n.span).reduce(Span::union).unwrap();
-        //let
 
         let [name, _equals, body @ .., _term] = nodes else {
             unreachable!()
         };
+        let Node {
+            payload: NodePayload::Nonterminal(name),
+            ..
+        } = name
+        else {
+            unreachable!(
+                "Somehow picked up a Rule with a name that is not a Nonterm - this is a bug"
+            )
+        };
 
         let payload = NodePayload::Rule(Rule {
-            name: Box::new(name.clone()),
-            body: body.iter().cloned().collect(),
+            name,
+            body: body.to_vec(),
         });
         (Node { span, payload }, size)
     }
@@ -142,7 +145,7 @@ impl<'a> LrStack<'a> {
         self.token_stack.get(index)
     }
 
-    pub(crate) fn match_rule(&self, r: &Regex) -> Option<Range<usize>> {
+    fn match_rule(&self, r: &Regex) -> Option<Range<usize>> {
         r.find(&self.token_pattern).as_ref().map(Match::range)
     }
 
@@ -163,45 +166,35 @@ impl<'a> LrStack<'a> {
             String(s) => NodePayload::Terminal(s),
             Identifier(s) => NodePayload::Nonterminal(s),
             Regex(s) => NodePayload::Regex(s),
-            Whitespace(_) | Newline => unreachable!(),
         };
         self.push_node(Node { span, payload });
     }
 
     pub(crate) fn push_node(&mut self, n: Node<'a>) {
-        let kind = if let NodePayload::UnparsedOperator(o) = n.payload {
-            o.get_str("string").unwrap()
-        } else {
-            let nk = NodeKind::from(&n.payload);
-            let name: &str = nk.into();
-            &name[..1]
-        };
+        let kind = node_pattern_code(&n);
         self.token_pattern.push_str(kind);
         self.token_stack.push(n);
     }
 
-    fn pop_node(&mut self) -> Option<Node<'a>> {
+    pub(crate) fn peek_node(&self) -> Option<&Node<'a>> {
+        self.token_stack.last()
+    }
+
+    pub(crate) fn pop_node(&mut self) -> Option<Node<'a>> {
         self.token_pattern.pop();
         self.token_stack.pop()
     }
 
-    pub(crate) fn drop_many(&mut self, n: usize) {
-        for _ in 0..n {
-            self.pop_node();
-        }
-    }
-
-    fn shiftreduce(&mut self, input: &mut LexedInput<'a, '_>) {
-        let regex_pattern = PATTERNS.map(|(p, f)| (decode_rule_regex(p), f));
-
-        loop {
-            let mut shift = true;
-            for (r, f) in &regex_pattern {
+    pub(crate) fn reduce_until_shift_needed(&mut self, lookahead: Option<&Token<'a>>) {
+        let mut dirty = true;
+        while dirty {
+            dirty = false;
+            for (r, f) in &*REDUCTION_PATTERNS {
                 if let Some(range) = self.match_rule(r) {
-                    let lookahead_pass = if let Some(t) = input.first() {
+                    let lookahead_pass = if let Some(t) = lookahead {
                         self.push_token(*t);
                         let r = self.match_rule(r).is_some();
-                        self.drop_many(1);
+                        self.pop_node();
                         r
                     } else {
                         false
@@ -209,72 +202,24 @@ impl<'a> LrStack<'a> {
                     if !lookahead_pass {
                         let nodes = self.get(range).unwrap();
                         let (replacement, consumed) = f(nodes);
-                        self.drop_many(consumed);
+                        for _ in 0..consumed {
+                            self.pop_node();
+                        }
                         self.push_node(replacement);
-                        shift = false;
+                        dirty = true;
                         break;
                     }
                 }
             }
-            if shift {
-                if let Some(t) = input.next_token() {
-                    self.push_token(*t);
-                } else {
-                    break;
-                }
-            }
         }
     }
 }
 
-pub(crate) fn file_reduce() {
-    let file = include_str!(r"..\tests\irc.ebnf");
-
-    for l in file.lines() {
-        dbg!(l);
-        let locating = LocatingSlice::new(l);
-        let TokenStore(tokens) = tokenize(locating).unwrap();
-        let mut input = TokenSlice::new(tokens.get(..).unwrap());
-        let mut stack = LrStack::new();
-        stack.shiftreduce(&mut input);
-        for n in stack.get(..).unwrap() {
-            display_tree::println_tree!(*n);
-        }
+fn node_pattern_code(n: &Node<'_>) -> &'static str {
+    if let NodePayload::UnparsedOperator(o) = n.payload {
+        o.get_str("string").unwrap()
+    } else {
+        let name: &str = NodeKind::from(&n.payload).into();
+        &name[..1]
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use winnow::{LocatingSlice, stream::TokenSlice};
-
-    use crate::{
-        lexing::tokenize,
-        parser::{PATTERNS, decode_rule_regex, shiftreduce},
-        token_data::TokenStore,
-    };
-
-    #[test]
-    fn decode_test() {
-        for (k, p) in PATTERNS {
-            println!("{k} => {}", decode_rule_regex(k).as_str());
-        }
-    }
-
-    // #[test]
-    // fn reduce_test() {
-    //     //let src = "  'A' | 'B' | 'C'  ";
-    //     let src = "A = ['A' 'B' 'C'];";
-    //     let locating = LocatingSlice::new(src);
-    //     let TokenStore(tokens) = tokenize(locating).unwrap();
-
-    //     let mut input = TokenSlice::new(tokens.get(..).unwrap());
-
-    //     let mut stack = LrStack::new();
-
-    //     shiftreduce(&mut stack, &mut input);
-
-    //     for n in stack.get(..).unwrap() {
-    //         display_tree::println_tree!(*n);
-    //     }
-    // }
 }

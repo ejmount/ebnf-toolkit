@@ -1,30 +1,25 @@
-use crate::{
-    container::MyVec as Vec,
-    token_data::{Span, Token},
-};
+use crate::token_data::Span;
 use display_tree::{AsTree, DisplayTree};
 use std::fmt::Display;
 
 use strum::{EnumCount, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantNames};
 
-#[derive(Debug, Clone, PartialEq, Eq, DisplayTree)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rule<'a> {
-    #[field_label]
-    pub name: Box<Node<'a>>,
-    #[tree]
-    #[field_label]
+    pub name: &'a str,
     pub body: Vec<Node<'a>>,
 }
 
-impl Display for Rule<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", AsTree::new(self))
-    }
-}
+// impl Display for Rule<'_> {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "{}", AsTree::new(self))
+//     }
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node<'a> {
     pub(crate) span: Span,
+
     pub(crate) payload: NodePayload<'a>,
 }
 
@@ -41,28 +36,27 @@ impl DisplayTree for Node<'_> {
     }
 }
 
-impl Display for Node<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", AsTree::new(self))
-    }
-}
+// impl Display for Node<'_> {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "{}", AsTree::new(self))
+//     }
+// }
 
-#[derive(Debug, Clone, PartialEq, Eq, EnumProperty, EnumDiscriminants, DisplayTree)]
+#[derive(Debug, Clone, PartialEq, Eq, EnumProperty, EnumDiscriminants)]
 #[strum_discriminants(name(NodeKind), derive(EnumCount, VariantNames, IntoStaticStr))]
 pub(crate) enum NodePayload<'a> {
     Terminal(&'a str),
     Nonterminal(&'a str),
-    Choice(#[tree] Vec<Node<'a>>),
-    Optional(#[tree] Vec<Node<'a>>),
-    Repeated(#[tree] Vec<Node<'a>>),
+    Choice(Vec<Node<'a>>),
+    Optional(Vec<Node<'a>>),
+    Repeated(Vec<Node<'a>>),
     Regex(&'a str),
-    List(#[tree] Vec<Node<'a>>),
-
+    List(Vec<Node<'a>>),
     UnparsedOperator(UnparsedOperator),
     Rule(Rule<'a>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumProperty)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumProperty, IntoStaticStr)]
 pub(crate) enum UnparsedOperator {
     #[strum(props(string = "("))]
     OpenedGroup,
