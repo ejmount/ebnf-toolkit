@@ -12,15 +12,16 @@ categories = ["parser-implementations"]
 
 [dependencies]
 ariadne = "0.5.1"
-arrayvec = "0.7.6"
 display_tree = "1.1.2"
 logos = "0.15.0"
 regex = "1.11.1"
 strum = { version = "0.27.1", features = ["derive", "strum_macros"] }
-winnow = "0.7.10"
 
 [dev-dependencies]
 insta = "1.43.1"
 
 [profile.dev.package]
 insta.opt-level = 3
+
+[profile.dev.package.similar]
+opt-level = 3
