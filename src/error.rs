@@ -2,19 +2,79 @@ use std::fmt::Display;
 
 use crate::parser::LrStack;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub enum EbnfError<'a> {
-    LexError { input: &'a str, offset: usize },
-    ParseError { input: &'a str, offset: usize },
+    LexError {
+        input: &'a str,
+        offset: usize,
+    },
+    ParseError {
+        input: &'a str,
+        offset: usize,
+        /// This is a guess, it may be wrong.
+        /// Its also unstable and errors in the same circumstances may produce different values for this field without notice
+        reason: Option<FailureReason<'a>>,
+    },
     EmptyInput,
-    //UnknownError(Vec<Node<'a>>),
 }
 
 impl EbnfError<'_> {
-    pub(crate) fn from_parse_error<'a>(input: &'a str, stack: LrStack) -> EbnfError<'a> {
-        dbg!(input, stack);
-        todo!()
+    pub fn input(&self) -> Option<&str> {
+        match self {
+            EbnfError::LexError { input, .. } | EbnfError::ParseError { input, .. } => Some(input),
+            _ => None,
+        }
+    }
+    pub fn offset(&self) -> Option<usize> {
+        match self {
+            EbnfError::LexError { offset, .. } | EbnfError::ParseError { offset, .. } => {
+                Some(*offset)
+            }
+            _ => None,
+        }
+    }
+}
+
+impl PartialEq for EbnfError<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        #[allow(clippy::enum_glob_use)]
+        use EbnfError::*;
+        match (self, other) {
+            (EmptyInput, EmptyInput) => true,
+            (this @ LexError { .. }, other @ LexError { .. })
+            | (this @ ParseError { .. }, other @ ParseError { .. }) => this
+                .input()
+                .cmp(&other.input())
+                .then(this.offset().cmp(&other.offset()))
+                .is_eq(),
+
+            _ => false,
+        }
+    }
+}
+
+impl Eq for EbnfError<'_> {}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy)]
+pub enum FailureReason<'a> {
+    TerminatorNotEndingRule(&'a str),
+    ExhaustedInput,
+}
+
+impl EbnfError<'_> {
+    pub(crate) fn from_parse_error<'a>(
+        input: &'a str,
+        _stack: LrStack,
+        offset: usize,
+        reason: Option<FailureReason<'a>>,
+    ) -> EbnfError<'a> {
+        EbnfError::ParseError {
+            input,
+            offset,
+            reason,
+        }
     }
 }
 

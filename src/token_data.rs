@@ -44,6 +44,7 @@ pub(crate) struct Token<'a> {
 
 impl Debug for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[allow(clippy::enum_glob_use)]
         use TokenPayload::*;
         let kind = TokenKind::from(self.payload);
         let span = &self.span;

@@ -24,7 +24,8 @@ fn decode_rule_regex(pat: &str) -> Regex {
 // Any node, including compound nodes, that is not an operator
 const NON_OPERATOR: &str = "[A-Za-z]";
 
-//
+/// Regexes over the token types for each reduction rule.
+/// NB: regex operators will be interpreted as usual, a grammar operator needs escaped
 static REDUCTION_PATTERNS: LazyLock<[(Regex, Reducer); 7]> = LazyLock::new(|| {
     [
         (decode_rule_regex(r"Any (\| Any)+"), rules::choice),
@@ -150,6 +151,7 @@ impl<'a> LrStack<'a> {
     }
 
     pub(crate) fn push_token(&mut self, t: Token<'a>) {
+        #![allow(clippy::enum_glob_use)]
         use TokenPayload::*;
         let Token { payload, span } = t;
         let payload = match payload {
@@ -171,6 +173,14 @@ impl<'a> LrStack<'a> {
     }
 
     pub(crate) fn push_node(&mut self, n: Node<'a>) {
+        fn node_pattern_code(n: &Node<'_>) -> &'static str {
+            if let NodePayload::UnparsedOperator(o) = n.payload {
+                o.get_str("string").unwrap()
+            } else {
+                let name: &str = NodeKind::from(&n.payload).into();
+                &name[..1]
+            }
+        }
         let kind = node_pattern_code(&n);
         self.token_pattern.push_str(kind);
         self.token_stack.push(n);
@@ -212,14 +222,5 @@ impl<'a> LrStack<'a> {
                 }
             }
         }
-    }
-}
-
-fn node_pattern_code(n: &Node<'_>) -> &'static str {
-    if let NodePayload::UnparsedOperator(o) = n.payload {
-        o.get_str("string").unwrap()
-    } else {
-        let name: &str = NodeKind::from(&n.payload).into();
-        &name[..1]
     }
 }
