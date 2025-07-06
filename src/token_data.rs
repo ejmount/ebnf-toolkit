@@ -72,9 +72,8 @@ impl PartialEq for Token<'_> {
 pub enum TokenPayload<'a> {
     #[regex(r"[\w_]*")]
     Identifier(&'a str),
-    #[regex(r"'[^']*'", |l| &l.slice()[1..l.slice().len()-1])]
-    #[regex(r#"""[^"\\]*(\\.[^"\\]*)*"""#, |l| &l.slice()[1..l.slice().len()-1])]
-    #[regex("\"[^\"]*\"", |l| &l.slice()[1..l.slice().len()-1])]
+    #[regex(r##"'(?:[^'\\]|\\.)*'"##, |l| &l.slice()[1..l.slice().len()-1])]
+    #[regex(r##""(?:[^"\\]|\\.)*""##, |l| &l.slice()[1..l.slice().len()-1])]
     String(&'a str),
     #[regex("#\"[^\"]+\"", |l| &l.slice()[2..l.slice().len()-1])]
     #[regex(r"#'[^']+'", |l| &l.slice()[2..l.slice().len()-1])]
@@ -169,11 +168,11 @@ mod test {
 
     #[test]
     fn lex_strings() {
-        let input = r#" 'Hello' "world" "escaped \" character"  "#;
+        let input = r#" 'Hello' "world" "escaped \" character" 'another \' escape' "#;
 
         let a: Vec<_> = tokenize(input).unwrap_or_else(|e| panic!("{e}"));
 
-        assert_compact_debug_snapshot!(a, @r#"[String [1..8]("Hello"), String [9..16]("world")]"#);
+        assert_compact_debug_snapshot!(a, @r#"[String [1..8]("Hello"), String [9..16]("world"), String [17..39]("escaped \\\" character"), String [40..59]("another \\\' escape")]"#);
     }
 
     #[test]
