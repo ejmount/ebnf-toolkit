@@ -125,7 +125,7 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, EbnfError<'_>> {
 
 #[cfg(test)]
 mod test {
-    use insta::{assert_compact_debug_snapshot, assert_debug_snapshot};
+    use insta::assert_compact_debug_snapshot;
 
     use crate::token_data::tokenize;
 

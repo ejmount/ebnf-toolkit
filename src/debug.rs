@@ -100,7 +100,6 @@ impl DisplayTree for Rule<'_> {
             }
         }
         Ok(())
-        //todo!()
     }
 }
 
