@@ -1,9 +1,15 @@
-use std::{ops::Range, slice::SliceIndex, str::FromStr, sync::LazyLock};
+use std::{
+    ops::{ControlFlow, Range},
+    slice::SliceIndex,
+    str::FromStr,
+    sync::LazyLock,
+};
 
 use regex::{Match, Regex};
 use strum::{EnumProperty, VariantNames};
 
 use crate::{
+    error::EbnfError,
     nodes::{Node, NodeKind, NodePayload, UnparsedOperator},
     token_data::{Token, TokenPayload},
 };
@@ -42,7 +48,8 @@ type Reducer = for<'a> fn(&[Node<'a>]) -> (Node<'a>, usize);
 
 mod rules {
     use crate::{
-        nodes::{Node, NodeKind, NodePayload, Rule, UnparsedOperator},
+        nodes::{Node, NodeKind, NodePayload, UnparsedOperator},
+        rule::Rule,
         token_data::Span,
     };
 
@@ -181,6 +188,7 @@ impl<'a> LrStack<'a> {
                 &name[..1]
             }
         }
+        //assert!(!matches!(n.payload, NodePayload::Nonterminal("tags")));
         let kind = node_pattern_code(&n);
         self.token_pattern.push_str(kind);
         self.token_stack.push(n);
@@ -195,8 +203,12 @@ impl<'a> LrStack<'a> {
         self.token_stack.pop()
     }
 
-    pub(crate) fn reduce_until_shift_needed(&mut self, lookahead: Option<&Token<'a>>) {
+    pub(crate) fn reduce_until_shift_needed(
+        &mut self,
+        lookahead: Option<&Token<'a>>,
+    ) -> Result<(), Node> {
         let mut dirty = true;
+
         while dirty {
             dirty = false;
             for (r, f) in &*REDUCTION_PATTERNS {
@@ -217,10 +229,17 @@ impl<'a> LrStack<'a> {
                         }
                         self.push_node(replacement);
                         dirty = true;
-                        break;
+                        #[cfg(debug_assertions)]
+                        if !matches!(
+                            self.token_stack.first().map(|n| &n.payload),
+                            None | Some(NodePayload::Nonterminal(_) | NodePayload::Rule(_))
+                        ) {
+                            return Err(self.token_stack.first().unwrap().clone());
+                        }
                     }
                 }
             }
         }
+        Ok(())
     }
 }

@@ -1,14 +1,8 @@
-use crate::token_data::Span;
+use crate::{Rule, token_data::Span};
 use display_tree::{AsTree, DisplayTree};
 use std::fmt::Display;
 
 use strum::{EnumCount, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantNames};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Rule<'a> {
-    pub name: &'a str,
-    pub body: Vec<Node<'a>>,
-}
 
 // impl Display for Rule<'_> {
 //     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

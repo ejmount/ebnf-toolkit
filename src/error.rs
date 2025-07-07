@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::parser::LrStack;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum EbnfError<'a> {
     LexError {
@@ -11,7 +11,8 @@ pub enum EbnfError<'a> {
     },
     ParseError {
         input: &'a str,
-        offset: usize,
+        start: usize,
+        end: Option<usize>,
         /// This is a guess, it may be wrong.
         /// Its also unstable and errors in the same circumstances may produce different values for this field without notice
         reason: Option<FailureReason<'a>>,
@@ -28,7 +29,7 @@ impl EbnfError<'_> {
     }
     pub fn offset(&self) -> Option<usize> {
         match self {
-            EbnfError::LexError { offset, .. } | EbnfError::ParseError { offset, .. } => {
+            EbnfError::LexError { offset, .. } | EbnfError::ParseError { start: offset, .. } => {
                 Some(*offset)
             }
             _ => None,
@@ -57,9 +58,10 @@ impl PartialEq for EbnfError<'_> {
 impl Eq for EbnfError<'_> {}
 
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum FailureReason<'a> {
-    TerminatorNotEndingRule(&'a str),
+    TerminatorNotEndingRule(&'a str, LrStack<'a>),
+    InvalidRuleStart,
     ExhaustedInput,
 }
 
@@ -67,12 +69,14 @@ impl EbnfError<'_> {
     pub(crate) fn from_parse_error<'a>(
         input: &'a str,
         _stack: LrStack,
-        offset: usize,
+        start: usize,
+        end: Option<usize>,
         reason: Option<FailureReason<'a>>,
     ) -> EbnfError<'a> {
         EbnfError::ParseError {
             input,
-            offset,
+            start,
+            end,
             reason,
         }
     }
@@ -106,7 +110,29 @@ impl Display for EbnfError<'_> {
                     report = report.with_note("Did you forget to close a string?");
                 }
             }
-            _ => todo!(),
+            EbnfError::EmptyInput => {
+                report = report.with_message("Input was empty");
+            }
+            EbnfError::ParseError {
+                input,
+                start,
+                end,
+                reason,
+            } => {
+                report = report.with_message("Parse error").with_label(
+                    Label::new(("", *start..end.unwrap_or(start + 1)))
+                        .with_message(format!(
+                            "Reason: {}",
+                            match reason.as_ref().unwrap() {
+                                FailureReason::TerminatorNotEndingRule(s, t) => format!("{t:?}"),
+                                FailureReason::ExhaustedInput => "exhausted".to_owned(),
+                                FailureReason::InvalidRuleStart =>
+                                    "Tried to start parsing a rule here".to_owned(),
+                            }
+                        ))
+                        .with_color(col),
+                );
+            }
         }
 
         let r = report.finish();

@@ -160,7 +160,7 @@ mod test {
 
     #[test]
     fn unclosed_string() {
-        let input = r#"'Hello"#;
+        let input = "'Hello";
 
         let a: Vec<_> = tokenize(input).unwrap_or_else(|e| panic!("{e}"));
 
