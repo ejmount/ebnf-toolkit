@@ -1,0 +1,11 @@
+---
+source: tests/failures_displays.rs
+expression: err
+---
+[31mError:[0m 
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m <input>:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m [38;5;201mA[0m[38;5;201m*[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mA[0m[38;5;249m;[0m
+ [38;5;240m  │[0m [38;5;201m─[0m[38;5;201m┬[0m  
+ [38;5;240m  │[0m  [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m Tried to start parsing a rule here; expected single non-terminal, found repetition
+[38;5;246m───╯[0m

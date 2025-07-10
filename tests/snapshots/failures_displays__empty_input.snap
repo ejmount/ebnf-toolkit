@@ -1,0 +1,5 @@
+---
+source: tests/failures_displays.rs
+expression: err
+---
+Input string was empty

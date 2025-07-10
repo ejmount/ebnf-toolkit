@@ -1,0 +1,5 @@
+---
+source: tests/irc.rs
+expression: "rules.get(\"vendor\").unwrap()"
+---
+Rule { name: "vendor", body: [Regex { span: Span { start: 239, end: 254, line_offset_start: (6, 18), line_offset_end: (6, 33) }, pattern: "[a-zA-Z0-9]+" }] }

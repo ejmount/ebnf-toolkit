@@ -1,0 +1,404 @@
+---
+source: src/lib.rs
+expression: grammar
+---
+{
+    "user": Rule {
+        name: "user",
+        body: [
+            Node {
+                span: Span {
+                    start: 568,
+                    end: 579,
+                },
+                payload: Regex(
+                    "[^\\r\\n ]",
+                ),
+            },
+        ],
+    },
+    "_nospcrlfcl": Rule {
+        name: "_nospcrlfcl",
+        body: [
+            Node {
+                span: Span {
+                    start: 854,
+                    end: 866,
+                },
+                payload: Regex(
+                    "[^ :\\r\\n]",
+                ),
+            },
+        ],
+    },
+    "host": Rule {
+        name: "host",
+        body: [
+            Node {
+                span: Span {
+                    start: 642,
+                    end: 658,
+                },
+                payload: Regex(
+                    "[a-zA-Z0-9.]+",
+                ),
+            },
+        ],
+    },
+    "username": Rule {
+        name: "username",
+        body: [
+            Node {
+                span: Span {
+                    start: 458,
+                    end: 492,
+                },
+                payload: List(
+                    [
+                        Node {
+                            span: Span {
+                                start: 460,
+                                end: 464,
+                            },
+                            payload: Nonterminal(
+                                "nick",
+                            ),
+                        },
+                        Node {
+                            span: Span {
+                                start: 465,
+                                end: 477,
+                            },
+                            payload: Optional(
+                                [
+                                    Node {
+                                        span: Span {
+                                            start: 467,
+                                            end: 470,
+                                        },
+                                        payload: Terminal(
+                                            "!",
+                                        ),
+                                    },
+                                    Node {
+                                        span: Span {
+                                            start: 471,
+                                            end: 475,
+                                        },
+                                        payload: Nonterminal(
+                                            "user",
+                                        ),
+                                    },
+                                ],
+                            ),
+                        },
+                        Node {
+                            span: Span {
+                                start: 478,
+                                end: 490,
+                            },
+                            payload: Optional(
+                                [
+                                    Node {
+                                        span: Span {
+                                            start: 480,
+                                            end: 483,
+                                        },
+                                        payload: Terminal(
+                                            "@",
+                                        ),
+                                    },
+                                    Node {
+                                        span: Span {
+                                            start: 484,
+                                            end: 488,
+                                        },
+                                        payload: Nonterminal(
+                                            "host",
+                                        ),
+                                    },
+                                ],
+                            ),
+                        },
+                    ],
+                ),
+            },
+        ],
+    },
+    "message": Rule {
+        name: "message",
+        body: [
+            Node {
+                span: Span {
+                    start: 18,
+                    end: 34,
+                },
+                payload: Optional(
+                    [
+                        Node {
+                            span: Span {
+                                start: 19,
+                                end: 22,
+                            },
+                            payload: Terminal(
+                                "@",
+                            ),
+                        },
+                        Node {
+                            span: Span {
+                                start: 23,
+                                end: 27,
+                            },
+                            payload: Nonterminal(
+                                "tags",
+                            ),
+                        },
+                        Node {
+                            span: Span {
+                                start: 28,
+                                end: 33,
+                            },
+                            payload: Nonterminal(
+                                "SPACE",
+                            ),
+                        },
+                    ],
+                ),
+            },
+            Node {
+                span: Span {
+                    start: 35,
+                    end: 54,
+                },
+                payload: Optional(
+                    [
+                        Node {
+                            span: Span {
+                                start: 36,
+                                end: 39,
+                            },
+                            payload: Terminal(
+                                ":",
+                            ),
+                        },
+                        Node {
+                            span: Span {
+                                start: 40,
+                                end: 46,
+                            },
+                            payload: Nonterminal(
+                                "source",
+                            ),
+                        },
+                        Node {
+                            span: Span {
+                                start: 47,
+                                end: 52,
+                            },
+                            payload: Nonterminal(
+                                "SPACE",
+                            ),
+                        },
+                    ],
+                ),
+            },
+            Node {
+                span: Span {
+                    start: 55,
+                    end: 62,
+                },
+                payload: Nonterminal(
+                    "command",
+                ),
+            },
+            Node {
+                span: Span {
+                    start: 63,
+                    end: 75,
+                },
+                payload: Optional(
+                    [
+                        Node {
+                            span: Span {
+                                start: 64,
+                                end: 74,
+                            },
+                            payload: Nonterminal(
+                                "parameters",
+                            ),
+                        },
+                    ],
+                ),
+            },
+            Node {
+                span: Span {
+                    start: 76,
+                    end: 80,
+                },
+                payload: Nonterminal(
+                    "crlf",
+                ),
+            },
+        ],
+    },
+    "crlf": Rule {
+        name: "crlf",
+        body: [
+            Node {
+                span: Span {
+                    start: 916,
+                    end: 922,
+                },
+                payload: Terminal(
+                    "\\r\\n",
+                ),
+            },
+        ],
+    },
+    "vendor": Rule {
+        name: "vendor",
+        body: [
+            Node {
+                span: Span {
+                    start: 242,
+                    end: 257,
+                },
+                payload: Regex(
+                    "[a-zA-Z0-9]+",
+                ),
+            },
+        ],
+    },
+    "tag": Rule {
+        name: "tag",
+        body: [
+            Node {
+                span: Span {
+                    start: 136,
+                    end: 139,
+                },
+                payload: Nonterminal(
+                    "key",
+                ),
+            },
+            Node {
+                span: Span {
+                    start: 140,
+                    end: 159,
+                },
+                payload: Optional(
+                    [
+                        Node {
+                            span: Span {
+                                start: 141,
+                                end: 144,
+                            },
+                            payload: Terminal(
+                                "=",
+                            ),
+                        },
+                        Node {
+                            span: Span {
+                                start: 145,
+                                end: 158,
+                            },
+                            payload: Nonterminal(
+                                "escaped_value",
+                            ),
+                        },
+                    ],
+                ),
+            },
+        ],
+    },
+    "command": Rule {
+        name: "command",
+        body: [
+            Node {
+                span: Span {
+                    start: 314,
+                    end: 329,
+                },
+                payload: Regex(
+                    "[a-zA-Z0-9]+",
+                ),
+            },
+        ],
+    },
+    "client_prefix": Rule {
+        name: "client_prefix",
+        body: [
+            Node {
+                span: Span {
+                    start: 386,
+                    end: 389,
+                },
+                payload: Terminal(
+                    "+",
+                ),
+            },
+        ],
+    },
+    "middle": Rule {
+        name: "middle",
+        body: [
+            Node {
+                span: Span {
+                    start: 746,
+                    end: 756,
+                },
+                payload: Nonterminal(
+                    "nospcrlfcl",
+                ),
+            },
+            Node {
+                span: Span {
+                    start: 757,
+                    end: 778,
+                },
+                payload: Repeated(
+                    [
+                        Node {
+                            span: Span {
+                                start: 757,
+                                end: 777,
+                            },
+                            payload: List(
+                                [
+                                    Node {
+                                        span: Span {
+                                            start: 759,
+                                            end: 775,
+                                        },
+                                        payload: Choice(
+                                            [
+                                                Node {
+                                                    span: Span {
+                                                        start: 759,
+                                                        end: 762,
+                                                    },
+                                                    payload: Terminal(
+                                                        ":",
+                                                    ),
+                                                },
+                                                Node {
+                                                    span: Span {
+                                                        start: 765,
+                                                        end: 775,
+                                                    },
+                                                    payload: Nonterminal(
+                                                        "nospcrlfcl",
+                                                    ),
+                                                },
+                                            ],
+                                        ),
+                                    },
+                                ],
+                            ),
+                        },
+                    ],
+                ),
+            },
+        ],
+    },
+}

@@ -1,0 +1,5 @@
+---
+source: tests/irc.rs
+expression: "rules.get(\"SPACE\").unwrap()"
+---
+Rule { name: "SPACE", body: [Repeated { span: Span { start: 870, end: 874, line_offset_start: (21, 20), line_offset_end: (21, 24) }, body: [Terminal { span: Span { start: 870, end: 873, line_offset_start: (21, 20), line_offset_end: (21, 23) }, str: " " }], one_needed: true }] }

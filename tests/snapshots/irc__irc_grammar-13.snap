@@ -1,0 +1,5 @@
+---
+source: tests/irc.rs
+expression: "rules.get(\"servername\").unwrap()"
+---
+Rule { name: "servername", body: [Regex { span: Span { start: 591, end: 606, line_offset_start: (15, 21), line_offset_end: (15, 36) }, pattern: "[a-zA-Z0-9]+" }] }

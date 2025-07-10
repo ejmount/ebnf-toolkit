@@ -1,0 +1,5 @@
+---
+source: tests/irc.rs
+expression: "rules.get(\"crlf\").unwrap()"
+---
+Rule { name: "crlf", body: [Terminal { span: Span { start: 896, end: 902, line_offset_start: (22, 20), line_offset_end: (22, 26) }, str: "\\r\\n" }] }

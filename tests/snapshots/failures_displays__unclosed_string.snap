@@ -1,0 +1,5 @@
+---
+source: tests/failures_displays.rs
+expression: err
+---
+LexError { input: "'Hello", offset: 0 }

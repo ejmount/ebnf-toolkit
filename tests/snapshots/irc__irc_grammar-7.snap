@@ -1,0 +1,5 @@
+---
+source: tests/irc.rs
+expression: "rules.get(\"escaped_value\").unwrap()"
+---
+Rule { name: "escaped_value", body: [Regex { span: Span { start: 344, end: 359, line_offset_start: (9, 18), line_offset_end: (9, 33) }, pattern: "[a-zA-Z0-9]+" }] }

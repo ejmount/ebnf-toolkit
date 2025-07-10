@@ -1,0 +1,5 @@
+---
+source: tests/irc.rs
+expression: "rules.get(\"nospcrlfcl\").unwrap()"
+---
+Rule { name: "nospcrlfcl", body: [Regex { span: Span { start: 836, end: 848, line_offset_start: (20, 21), line_offset_end: (20, 33) }, pattern: "[^ :\\r\\n]" }] }

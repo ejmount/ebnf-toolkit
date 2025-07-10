@@ -84,7 +84,7 @@ mod test {
     use crate::{Grammar, Node, Rule, token_data::DUMMY_SPAN};
 
     #[test]
-    fn nonterminals_order() {
+    fn nonterminals() {
         let span = DUMMY_SPAN;
         let body = vec![
             Node::List {

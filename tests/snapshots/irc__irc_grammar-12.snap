@@ -1,0 +1,5 @@
+---
+source: tests/irc.rs
+expression: "rules.get(\"user\").unwrap()"
+---
+Rule { name: "user", body: [Regex { span: Span { start: 557, end: 568, line_offset_start: (14, 21), line_offset_end: (14, 32) }, pattern: "[^\\r\\n ]" }] }

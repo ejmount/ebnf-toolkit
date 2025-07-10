@@ -1,0 +1,5 @@
+---
+source: tests/irc.rs
+expression: "rules.get(\"key_name\").unwrap()"
+---
+Rule { name: "key_name", body: [Regex { span: Span { start: 274, end: 289, line_offset_start: (7, 18), line_offset_end: (7, 33) }, pattern: "[a-zA-Z0-9]+" }] }

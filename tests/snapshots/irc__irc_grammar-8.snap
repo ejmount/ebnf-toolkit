@@ -1,0 +1,5 @@
+---
+source: tests/irc.rs
+expression: "rules.get(\"client_prefix\").unwrap()"
+---
+Rule { name: "client_prefix", body: [Terminal { span: Span { start: 379, end: 382, line_offset_start: (10, 18), line_offset_end: (10, 21) }, str: "+" }] }

@@ -1,0 +1,5 @@
+---
+source: tests/irc.rs
+expression: "rules.get(\"parameters\").unwrap()"
+---
+Rule { name: "parameters", body: [Repeated { span: Span { start: 668, end: 685, line_offset_start: (17, 21), line_offset_end: (17, 38) }, body: [List { span: Span { start: 668, end: 684, line_offset_start: (17, 21), line_offset_end: (17, 37) }, body: [Nonterminal { span: Span { start: 670, end: 675, line_offset_start: (17, 23), line_offset_end: (17, 28) }, name: "SPACE" }, Nonterminal { span: Span { start: 676, end: 682, line_offset_start: (17, 29), line_offset_end: (17, 35) }, name: "middle" }] }], one_needed: false }, Optional { span: Span { start: 686, end: 708, line_offset_start: (17, 39), line_offset_end: (17, 61) }, body: [Nonterminal { span: Span { start: 688, end: 693, line_offset_start: (17, 41), line_offset_end: (17, 46) }, name: "SPACE" }, Terminal { span: Span { start: 694, end: 697, line_offset_start: (17, 47), line_offset_end: (17, 50) }, str: ":" }, Nonterminal { span: Span { start: 698, end: 706, line_offset_start: (17, 51), line_offset_end: (17, 59) }, name: "trailing" }] }] }
