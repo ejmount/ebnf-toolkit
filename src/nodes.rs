@@ -1,57 +1,76 @@
 use crate::{Rule, token_data::Span};
-use display_tree::{AsTree, DisplayTree};
-use std::fmt::Display;
 
-use strum::{EnumCount, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantNames};
+use strum::{EnumDiscriminants, EnumProperty, IntoStaticStr, VariantNames};
 
-// impl Display for Rule<'_> {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "{}", AsTree::new(self))
-//     }
-// }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Node<'a> {
-    pub(crate) span: Span,
-
-    pub(crate) payload: NodePayload<'a>,
+#[derive(Debug, Clone, PartialEq, Eq, EnumDiscriminants)]
+#[strum_discriminants(name(NodeKind), derive(VariantNames, IntoStaticStr))]
+pub enum Node<'a> {
+    Terminal {
+        span: Span,
+        str: &'a str,
+    },
+    Nonterminal {
+        span: Span,
+        name: &'a str,
+    },
+    Choice {
+        span: Span,
+        body: Vec<Node<'a>>,
+    },
+    Optional {
+        span: Span,
+        body: Vec<Node<'a>>,
+    },
+    Repeated {
+        span: Span,
+        body: Vec<Node<'a>>,
+        one_needed: bool,
+    },
+    Regex {
+        span: Span,
+        pattern: &'a str,
+    },
+    List {
+        span: Span,
+        body: Vec<Node<'a>>,
+    },
+    UnparsedOperator {
+        span: Span,
+        op: Operator,
+    },
+    Rule {
+        span: Span,
+        rule: Rule<'a>,
+    },
 }
 
-impl DisplayTree for Node<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter, style: display_tree::Style) -> std::fmt::Result {
-        let payload = AsTree::with_style(&self.payload, style).to_string();
-        let mut lines = payload.lines();
-        let first_line = lines.next().unwrap();
-        writeln!(f, "{first_line} {}", self.span)?;
-        for line in lines {
-            writeln!(f, "{line}")?;
+impl Node<'_> {
+    pub fn span(&self) -> Span {
+        match self {
+            Node::Terminal { span, .. }
+            | Node::Nonterminal { span, .. }
+            | Node::Choice { span, .. }
+            | Node::Optional { span, .. }
+            | Node::Repeated { span, .. }
+            | Node::Regex { span, .. }
+            | Node::List { span, .. }
+            | Node::UnparsedOperator { span, .. }
+            | Node::Rule { span, .. } => *span,
         }
-        Ok(())
+    }
+
+    pub(crate) fn node_pattern_code(&self) -> &'static str {
+        if let Node::UnparsedOperator { op, .. } = self {
+            op.get_str("string").unwrap()
+        } else {
+            let name: &str = NodeKind::from(self).into();
+            &name[..1]
+        }
     }
 }
 
-// impl Display for Node<'_> {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "{}", AsTree::new(self))
-//     }
-// }
-
-#[derive(Debug, Clone, PartialEq, Eq, EnumProperty, EnumDiscriminants)]
-#[strum_discriminants(name(NodeKind), derive(EnumCount, VariantNames, IntoStaticStr))]
-pub(crate) enum NodePayload<'a> {
-    Terminal(&'a str),
-    Nonterminal(&'a str),
-    Choice(Vec<Node<'a>>),
-    Optional(Vec<Node<'a>>),
-    Repeated(Vec<Node<'a>>),
-    Regex(&'a str),
-    List(Vec<Node<'a>>),
-    UnparsedOperator(UnparsedOperator),
-    Rule(Rule<'a>),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumProperty, IntoStaticStr)]
-pub(crate) enum UnparsedOperator {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumProperty, IntoStaticStr)]
+pub enum Operator {
     #[strum(props(string = "("))]
     OpenedGroup,
     #[strum(props(string = ")"))]
@@ -72,70 +91,4 @@ pub(crate) enum UnparsedOperator {
     Optional,
     #[strum(props(string = "+"))]
     Repeat,
-}
-
-impl Display for UnparsedOperator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl From<&'_ Node<'_>> for NodeKind {
-    fn from(value: &Node) -> Self {
-        Self::from(&value.payload)
-    }
-}
-
-#[cfg(test)]
-mod test {
-
-    // #[test]
-    // fn basic_parse() {
-    //     let src = "foo ::= [(bar)(baz)];";
-    //     let src = LocatingSlice::new(src);
-    //     let tokens = tokenize(src).unwrap();
-    //     let mut input = LexedInput::new(&tokens);
-    //     let result = Rule::parser.parse_next(&mut input).unwrap();
-
-    //     let tree = format_tree!(result);
-
-    //     insta::assert_snapshot!(tree, @r#"
-    //     Rule
-    //     ├── name: Identifier [0..3]("foo")
-    //     └── tree: Sequence [8..20]
-    //         └── 0: Sequence [8..20]
-    //                └── 0: Sequence [9..14]
-    //                    │  └── 0: Nonterminal [10..13]
-    //                    │         └── bar
-    //                    1: Sequence [14..19]
-    //                       └── 0: Nonterminal [15..18]
-    //                              └── baz
-    //     "#);
-    //     //panic!();
-    // }
-
-    // #[test]
-    // fn reporting_unexpected_token() {
-    //     use crate::parser::InternalErrorType;
-    //     const BAD_SRC: &str = "longlabel ::= ::=";
-    //     let bad_input = LocatingSlice::new(BAD_SRC);
-    //     let bad_tokens = tokenize(bad_input).unwrap();
-    //     let bad_tokens = TokenSlice::new(&bad_tokens);
-    //     let bad_result = Rule::parser.parse(bad_tokens);
-
-    //     let err = bad_result.unwrap_err();
-    //     let offset = err.offset();
-    //     let ctx: Vec<_> = err.inner().context().collect();
-    //     let tok_context = ctx.first().unwrap();
-
-    //     let span = if let InternalErrorType::TokenError(token_error) = tok_context {
-    //         token_error.found.unwrap().span
-    //     } else {
-    //         unimplemented!()
-    //     };
-
-    //     assert_compact_debug_snapshot!(tok_context, @"TokenError(TokenError { expected: TokenSet([Identifier, Alternation, Optional, String, OpeningGroup, ClosingGroup, OpeningSquare, ClosingSquare, Whitespace]), found: Some(Equals [14..17]) })");
-
-    //     assert_eq!(&BAD_SRC[span.start..], "::=");
-    // }
 }

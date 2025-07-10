@@ -1,6 +1,13 @@
 use std::fmt::Display;
 
-use crate::parser::LrStack;
+use display_tree::Style;
+
+use crate::{
+    Node,
+    debug::print_vec_tree,
+    nodes::{NodeKind, Operator},
+    parser::LrStack,
+};
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -60,9 +67,9 @@ impl Eq for EbnfError<'_> {}
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum FailureReason<'a> {
-    TerminatorNotEndingRule(&'a str, LrStack<'a>),
-    InvalidRuleStart,
-    ExhaustedInput,
+    TerminatorNotEndingRule(Vec<Node<'a>>),
+    InvalidRuleStart(Node<'a>),
+    ExhaustedInput(Vec<Node<'a>>),
 }
 
 impl EbnfError<'_> {
@@ -96,42 +103,93 @@ impl Display for EbnfError<'_> {
 
         let col = colors.next();
 
-        let mut report = Report::build(ReportKind::Error, ("", 0..input.len()));
+        let mut report = Report::build(ReportKind::Error, ("<input>", 0..input.len()));
 
         #[allow(clippy::range_plus_one)]
         match self {
             &EbnfError::LexError { offset, .. } => {
                 report = report.with_message("Tokenization error").with_label(
-                    Label::new(("", offset..1 + offset))
+                    Label::new(("<input>", offset..1 + offset))
                         .with_message("This was not recognised as the start of a valid token")
                         .with_color(col),
                 );
                 if input.as_bytes()[offset] == b'\'' || input.as_bytes()[offset] == b'"' {
-                    report = report.with_note("Did you forget to close a string?");
+                    report = report.with_note("Is this the beginning of an unclosed string?");
                 }
             }
             EbnfError::EmptyInput => {
                 report = report.with_message("Input was empty");
             }
             EbnfError::ParseError {
-                input,
+                input: _,
                 start,
                 end,
                 reason,
             } => {
-                report = report.with_message("Parse error").with_label(
-                    Label::new(("", *start..end.unwrap_or(start + 1)))
-                        .with_message(format!(
-                            "Reason: {}",
-                            match reason.as_ref().unwrap() {
-                                FailureReason::TerminatorNotEndingRule(s, t) => format!("{t:?}"),
-                                FailureReason::ExhaustedInput => "exhausted".to_owned(),
-                                FailureReason::InvalidRuleStart =>
-                                    "Tried to start parsing a rule here".to_owned(),
+                match reason.as_ref().unwrap() {
+                    FailureReason::ExhaustedInput(nodes) => {
+                        let mut nodes = nodes.clone();
+                        report = report.with_message("Parse error: Unexpected end of input");
+                        nodes.reverse();
+                        let mut tree_output = String::new();
+                        print_vec_tree(&mut tree_output, Style::default(), &nodes).unwrap();
+                        report = report.with_note(format!(
+                            "The parse stack looked like this (most recent on top):\n{tree_output}",
+                        ));
+                    }
+
+                    FailureReason::InvalidRuleStart(incorrect_node) => {
+                        let found_msg = match NodeKind::from(incorrect_node) {
+                            NodeKind::Terminal => "string literal",
+                            NodeKind::Regex => "regular expression",
+                            NodeKind::UnparsedOperator => "operator",
+                            NodeKind::List => "list of terms", // unreachable?
+                            NodeKind::Choice => "alternatives",
+                            NodeKind::Repeated => "repetition",
+                            NodeKind::Optional => "optional",
+                            NodeKind::Rule | NodeKind::Nonterminal => unreachable!(),
+                        };
+                        report = report.with_label(    Label::new(("<input>", *start..end.unwrap_or(start + 1)))
+                                .with_message(format!("Tried to start parsing a rule here; expected single non-terminal, found {found_msg}"))
+                                .with_color(col),
+                        );
+                    }
+                    FailureReason::TerminatorNotEndingRule(nodes) => {
+                        for n in nodes {
+                            if let Node::UnparsedOperator { span, op } = n {
+                                if *op != Operator::Equals && *op != Operator::Terminator {
+                                    let message = match *op {
+                                        Operator::OpenedGroup | Operator::OpenedSquare => {
+                                            "Possible unclosed bracket"
+                                        }
+                                        Operator::Kleene
+                                        | Operator::Optional
+                                        | Operator::Repeat => "Could not apply to preceding term",
+                                        _ => "Operator not understood",
+                                    };
+                                    report = report.with_label(
+                                        Label::new(("<input>", span.start()..span.end()))
+                                            .with_color(colors.next())
+                                            .with_message(message),
+                                    );
+                                }
                             }
-                        ))
-                        .with_color(col),
-                );
+                        }
+                        let mut nodes = nodes.clone();
+                        nodes.reverse();
+                        let mut tree_output = String::new();
+                        print_vec_tree(&mut tree_output, Style::default(), &nodes).unwrap();
+                        report = report
+                        .with_label(
+                            Label::new(("<input>", *start..end.unwrap_or(start + 1)))
+                                .with_message(
+                                    "Rule ending here did not parse successfully".to_string(),
+                                )
+                                .with_color(col),
+                        )
+                        .with_note(format!("The parse stack looked like this (most recent on top):\n{tree_output}",));
+                    }
+                }
             }
         }
 
@@ -139,7 +197,7 @@ impl Display for EbnfError<'_> {
 
         let mut output = vec![];
 
-        r.write(("", s), &mut output).unwrap();
+        r.write(("<input>", s), &mut output).unwrap();
         write!(f, "{}", String::from_utf8(output).unwrap())?;
 
         Ok(())

@@ -3,40 +3,62 @@ use std::{
     ops::Range,
 };
 
-use logos::Logos;
+use logos::{Lexer, Logos, Skip};
 use strum::{Display, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantArray};
 
 use crate::error::EbnfError;
 
+#[allow(unused)]
+pub(crate) const DUMMY_SPAN: Span = Span {
+    start: usize::MAX - 1,
+    end: usize::MAX,
+    line_offset_start: (u32::MAX - 1, 0),
+    line_offset_end: (u32::MAX - 1, 2),
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Span {
-    pub(crate) start: usize,
-    pub(crate) end: usize,
-}
-
-impl From<Range<usize>> for Span {
-    fn from(Range { start, end }: Range<usize>) -> Self {
-        Span { start, end }
-    }
+    start: usize,
+    end: usize,
+    // No single line will be 4 billion bytes long and we're unlikely to have 4 billion lines
+    // And this structure is used all over the place so we do save something significant if it's smaller
+    line_offset_start: (u32, u32),
+    line_offset_end: (u32, u32),
 }
 
 impl Span {
+    pub fn start(&self) -> usize {
+        self.start
+    }
+    pub fn end(&self) -> usize {
+        self.end
+    }
+
     pub(crate) fn union(s: Span, t: Span) -> Span {
+        let min = if s.start < t.start { s } else { t };
+        let max = if s.end > t.end { s } else { t };
+
         Span {
-            start: s.start.min(t.start),
-            end: s.end.max(t.end),
+            start: min.start,
+            end: max.end,
+            line_offset_start: min.line_offset_start,
+            line_offset_end: max.line_offset_end,
         }
     }
 }
 
 impl Display for Span {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Span { start, end } = self;
-        write!(f, "[{start}..{end}]")
+        let Span {
+            line_offset_start: (start_line, start_off),
+            line_offset_end: (end_line, end_off),
+            ..
+        } = self;
+        write!(f, "[{start_line}:{start_off}..{end_line}:{end_off}]",)
     }
 }
 
-#[derive(Clone, Copy, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Token<'a> {
     pub(crate) span: Span,
     pub(crate) payload: TokenPayload<'a>,
@@ -55,21 +77,16 @@ impl Debug for Token<'_> {
                 write!(f, "(\"{}\")", s.escape_debug())
             }
             Kleene | Repeat | Equals | Termination | Alternation | Optional | OpeningGroup
-            | ClosingGroup | OpeningSquare | ClosingSquare => Ok(()),
+            | ClosingGroup | OpeningSquare | ClosingSquare | Newline => Ok(()),
         }
-    }
-}
-
-impl PartialEq for Token<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.payload == other.payload
     }
 }
 
 #[derive(EnumDiscriminants, IntoStaticStr, EnumProperty)]
 #[strum_discriminants(name(TokenKind), derive(VariantArray, Display, PartialOrd, Ord))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Logos)]
-#[logos(skip r"[[:space:]]")]
+#[derive(Logos, Debug, Clone, Copy, PartialEq, Eq)]
+#[logos(skip "[[:space:]]")]
+#[logos(extras = (usize, usize))]
 pub enum TokenPayload<'a> {
     #[regex(r"[\w_]*")]
     Identifier(&'a str),
@@ -100,20 +117,50 @@ pub enum TokenPayload<'a> {
     OpeningSquare,
     #[token("]")]
     ClosingSquare,
+    #[token("\n", line_counter, priority = 20)]
+    #[token("\r", line_counter, priority = 20)]
+    #[token("\r\n", line_counter)]
+    Newline,
+}
+
+fn line_counter<'a>(lex: &mut Lexer<'a, TokenPayload<'a>>) -> Skip {
+    #[allow(clippy::naive_bytecount)]
+    let lines = lex
+        .slice()
+        .as_bytes()
+        .iter()
+        .filter(|b| **b == b'\n')
+        .count();
+    lex.extras.0 += lines;
+    lex.extras.1 = lex.span().end;
+    Skip
 }
 
 pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, EbnfError<'_>> {
-    let lexer = TokenPayload::lexer(input).spanned();
+    let mut lexer = TokenPayload::lexer(input).spanned();
 
     let mut output = Vec::new();
-    for (payload, s) in lexer {
+
+    while let Some((payload, s)) = lexer.next() {
+        let (line_count, last_newline_offset) = lexer.extras;
         if let Ok(payload) = payload {
-            let t = Token {
-                span: s.into(),
-                payload,
+            let Range { start, end } = s;
+            dbg!(start, last_newline_offset, payload);
+            let line_offset_start = start - last_newline_offset;
+            dbg!(line_offset_start, start, last_newline_offset);
+            let line_offset_end = end - last_newline_offset;
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "No line will be 2^32 bytes long"
+            )]
+            let span = Span {
+                start,
+                end,
+                line_offset_start: (1 + line_count as u32, line_offset_start as u32),
+                line_offset_end: (1 + line_count as u32, line_offset_end as u32),
             };
 
-            output.push(t);
+            output.push(Token { span, payload });
         } else {
             return Err(EbnfError::LexError {
                 input,
@@ -137,7 +184,7 @@ mod test {
 
         let tokens = tokenize(input).unwrap();
 
-        assert_compact_debug_snapshot!(&tokens[..], @r#"[Identifier [0..7]("message"), Equals [14..17], OpeningSquare [18..19], String [19..22]("@"), Identifier [23..27]("tags"), Identifier [28..33]("SPACE"), ClosingSquare [33..34], OpeningSquare [35..36], String [36..39](":"), Identifier [40..46]("source"), Identifier [47..52]("SPACE"), ClosingSquare [53..54], Identifier [55..62]("command"), OpeningSquare [63..64], Identifier [64..74]("parameters"), ClosingSquare [74..75], Identifier [76..80]("crlf"), Termination [80..81]]"#);
+        assert_compact_debug_snapshot!(&tokens[..], @r#"[Identifier [1:0..1:7]("message"), Equals [1:14..1:17], OpeningSquare [1:18..1:19], String [1:19..1:22]("@"), Identifier [1:23..1:27]("tags"), Identifier [1:28..1:33]("SPACE"), ClosingSquare [1:33..1:34], OpeningSquare [1:35..1:36], String [1:36..1:39](":"), Identifier [1:40..1:46]("source"), Identifier [1:47..1:52]("SPACE"), ClosingSquare [1:53..1:54], Identifier [1:55..1:62]("command"), OpeningSquare [1:63..1:64], Identifier [1:64..1:74]("parameters"), ClosingSquare [1:74..1:75], Identifier [1:76..1:80]("crlf"), Termination [1:80..1:81]]"#);
     }
 
     #[test]
@@ -155,25 +202,16 @@ mod test {
 
         let tokens: Vec<_> = inputs.into_iter().map(tokenize).collect();
 
-        assert_compact_debug_snapshot!(tokens, @r#"[Ok([Identifier [0..7]("Charlie")]), Ok([Identifier [0..6]("Hen3ry")]), Ok([Identifier [0..4]("Zoë")]), Ok([Identifier [0..6]("ζωή")]), Ok([Identifier [0..9]("_Underbar")]), Ok([Identifier [0..10]("under_pass")]), Ok([Identifier [0..4]("3113")]), Ok([Identifier [0..6]("3_enry")])]"#);
+        assert_compact_debug_snapshot!(tokens, @r#"[Ok([Identifier [1:0..1:7]("Charlie")]), Ok([Identifier [1:0..1:6]("Hen3ry")]), Ok([Identifier [1:0..1:4]("Zoë")]), Ok([Identifier [1:0..1:6]("ζωή")]), Ok([Identifier [1:0..1:9]("_Underbar")]), Ok([Identifier [1:0..1:10]("under_pass")]), Ok([Identifier [1:0..1:4]("3113")]), Ok([Identifier [1:0..1:6]("3_enry")])]"#);
     }
 
     #[test]
-    fn unclosed_string() {
-        let input = "'Hello";
-
-        let a: Vec<_> = tokenize(input).unwrap_or_else(|e| panic!("{e}"));
-
-        assert_compact_debug_snapshot!(a, @r#"[String [1..8]("Hello"), String [9..16]("world")]"#);
-    }
-
-    #[test]
-    fn lex_strings() {
+    fn lex_escaped_strings() {
         let input = r#" 'Hello' "world" "escaped \" character" 'another \' escape' "#;
 
         let a: Vec<_> = tokenize(input).unwrap_or_else(|e| panic!("{e}"));
 
-        assert_compact_debug_snapshot!(a, @r#"[String [1..8]("Hello"), String [9..16]("world"), String [17..39]("escaped \\\" character"), String [40..59]("another \\\' escape")]"#);
+        assert_compact_debug_snapshot!(a, @r#"[String [1:1..1:8]("Hello"), String [1:9..1:16]("world"), String [1:17..1:39]("escaped \\\" character"), String [1:40..1:59]("another \\\' escape")]"#);
     }
 
     #[test]
@@ -182,6 +220,7 @@ mod test {
 
         let err = tokenize(input).unwrap_err();
 
+        assert_eq!(err, err);
         assert_compact_debug_snapshot!(err, @r#"LexError { input: " A ? ££££", offset: 5 }"#);
     }
 }

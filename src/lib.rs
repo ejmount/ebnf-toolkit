@@ -17,28 +17,15 @@ mod parser;
 mod rule;
 mod token_data;
 
-use std::collections::HashMap;
-
+pub use error::{EbnfError, FailureReason};
 pub use nodes::Node;
 pub use rule::{Grammar, Rule};
 pub use token_data::Span;
 
 use crate::{
-    error::{EbnfError, FailureReason},
-    nodes::NodePayload,
     parser::LrStack,
-    token_data::{Token, TokenPayload, tokenize},
+    token_data::{Token, TokenPayload},
 };
-
-pub fn parse_rule(input: &str) -> Result<Rule<'_>, EbnfError> {
-    let tokens = tokenize(input)?;
-
-    let mut tokens_buffer = &tokens[..];
-    Ok(parse_rule_from_tokens(input, &mut tokens_buffer)?
-        .into_iter()
-        .next()
-        .unwrap())
-}
 
 fn parse_rule_from_tokens<'a>(
     input: &'a str,
@@ -60,88 +47,70 @@ fn parse_rule_from_tokens<'a>(
         // During the shift-reduce cycle, the lookahead is used to ensure reductions are greedy, but is never incorporated into the reduced node itself.
         // This means there needs to be exactly one round of reducing where there is no lookhead token, because the final token may be part of a reduction. (But since every round repeatedly reduces until a shift is needed, a second empty lookahead would be a waste)
 
-        let lookahead = input_tokens.split_off_first();
-
-        if matches!(
-            lookahead,
-            Some(Token {
-                payload: TokenPayload::Termination,
-                ..
-            })
-        ) {
-            end_of_rule_expected = Some(n + 1);
-        }
-
-        stack
-            .reduce_until_shift_needed(lookahead)
-            .map_err(|n| EbnfError::ParseError {
+        stack.reduce_until_shift_needed().map_err(|(stack, n)| {
+            EbnfError::from_parse_error(
                 input,
-                start: n.span.start,
-                end: Some(n.span.end),
-                reason: Some(FailureReason::InvalidRuleStart),
-            })?;
-
-        if Some(n) == end_of_rule_expected
-            && !matches!(
-                stack.peek_node(),
-                Some(Node {
-                    payload: NodePayload::Rule(_),
-                    ..
-                })
+                stack.clone(),
+                n.span().start(),
+                Some(n.span().end()),
+                Some(FailureReason::InvalidRuleStart(n.clone())),
             )
+        })?;
+
+        if Some(n) == end_of_rule_expected && !matches!(stack.peek_node(), Some(Node::Rule { .. }))
         {
-            let offset = stack.peek_node().unwrap().span.start;
-            let tail = &input[stack.peek_node().unwrap().span.start..];
+            let offset = stack.peek_node().unwrap().span().start();
             return Err(EbnfError::from_parse_error(
                 input,
                 stack.clone(),
                 offset,
                 None,
-                Some(FailureReason::TerminatorNotEndingRule(tail, stack)),
+                Some(FailureReason::TerminatorNotEndingRule(
+                    stack.get(..).unwrap().to_vec(),
+                )),
             ));
         }
 
-        if let Some(Node {
-            payload: NodePayload::Rule(_),
-            ..
-        }) = stack.peek_node()
-        {
-            let NodePayload::Rule(r) = stack.pop_node().unwrap().payload else {
+        if let Some(Node::Rule { .. }) = stack.peek_node() {
+            let Node::Rule { rule, .. } = stack.pop_node().unwrap() else {
                 unreachable!()
             };
-            outputs.push(r);
+            outputs.push(rule);
         }
 
-        if let Some(lookahead) = lookahead {
-            //println!("{n} {lookahead:?} => next: {:?}", &input_tokens[..2]);
-            stack.push_token(*lookahead);
+        if let Some(new_token) = input_tokens.split_off_first() {
+            if TokenPayload::Termination == new_token.payload {
+                end_of_rule_expected = Some(n + 1);
+            }
+            stack.push_token(*new_token);
         }
     }
     if stack.get(..).unwrap().is_empty() {
         Ok(outputs)
     } else {
+        let reason = FailureReason::ExhaustedInput(stack.get(..).unwrap().to_vec());
         Err(EbnfError::from_parse_error(
             input,
             stack,
             input.len(),
             None,
-            Some(FailureReason::ExhaustedInput),
+            Some(reason),
         ))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_rule;
+    use crate::Rule;
 
     #[test]
     fn basic_success() {
         let src =
             "message       ::= ['@' tags SPACE] [':' source SPACE ] command [parameters] crlf;";
 
-        let parse = parse_rule(src).unwrap_or_else(|e| panic!("{e}"));
+        let parse = Rule::new(src).unwrap_or_else(|e| panic!("{e}"));
 
         //let tree = format_tree!(parse);
-        insta::assert_compact_debug_snapshot!(parse, @r#"Rule { name: "message", body: [Node { span: Span { start: 18, end: 34 }, payload: Optional([Node { span: Span { start: 19, end: 22 }, payload: Terminal("@") }, Node { span: Span { start: 23, end: 27 }, payload: Nonterminal("tags") }, Node { span: Span { start: 28, end: 33 }, payload: Nonterminal("SPACE") }]) }, Node { span: Span { start: 35, end: 54 }, payload: Optional([Node { span: Span { start: 36, end: 39 }, payload: Terminal(":") }, Node { span: Span { start: 40, end: 46 }, payload: Nonterminal("source") }, Node { span: Span { start: 47, end: 52 }, payload: Nonterminal("SPACE") }]) }, Node { span: Span { start: 55, end: 62 }, payload: Nonterminal("command") }, Node { span: Span { start: 63, end: 75 }, payload: Optional([Node { span: Span { start: 64, end: 74 }, payload: Nonterminal("parameters") }]) }, Node { span: Span { start: 76, end: 80 }, payload: Nonterminal("crlf") }] }"#);
+        insta::assert_compact_debug_snapshot!(parse, @r#"Rule { name: "message", body: [Optional { span: Span { start: 18, end: 34, line_offset_start: (1, 18), line_offset_end: (1, 34) }, body: [Terminal { span: Span { start: 19, end: 22, line_offset_start: (1, 19), line_offset_end: (1, 22) }, str: "@" }, Nonterminal { span: Span { start: 23, end: 27, line_offset_start: (1, 23), line_offset_end: (1, 27) }, name: "tags" }, Nonterminal { span: Span { start: 28, end: 33, line_offset_start: (1, 28), line_offset_end: (1, 33) }, name: "SPACE" }] }, Optional { span: Span { start: 35, end: 54, line_offset_start: (1, 35), line_offset_end: (1, 54) }, body: [Terminal { span: Span { start: 36, end: 39, line_offset_start: (1, 36), line_offset_end: (1, 39) }, str: ":" }, Nonterminal { span: Span { start: 40, end: 46, line_offset_start: (1, 40), line_offset_end: (1, 46) }, name: "source" }, Nonterminal { span: Span { start: 47, end: 52, line_offset_start: (1, 47), line_offset_end: (1, 52) }, name: "SPACE" }] }, Nonterminal { span: Span { start: 55, end: 62, line_offset_start: (1, 55), line_offset_end: (1, 62) }, name: "command" }, Optional { span: Span { start: 63, end: 75, line_offset_start: (1, 63), line_offset_end: (1, 75) }, body: [Nonterminal { span: Span { start: 64, end: 74, line_offset_start: (1, 64), line_offset_end: (1, 74) }, name: "parameters" }] }, Nonterminal { span: Span { start: 76, end: 80, line_offset_start: (1, 76), line_offset_end: (1, 80) }, name: "crlf" }] }"#);
     }
 }

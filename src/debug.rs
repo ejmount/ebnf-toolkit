@@ -1,38 +1,36 @@
 #![warn(warnings)]
-use std::iter::once;
+use std::{
+    fmt::{Formatter, Write},
+    iter::once,
+};
 
 use display_tree::{AsTree, DisplayTree, Style};
 
-use crate::{
-    Rule,
-    nodes::{NodeKind, NodePayload},
-};
+use crate::{Node, Rule, nodes::NodeKind};
 
 const EMPTY_STRING: &str = "";
 
-impl DisplayTree for NodePayload<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter, style: Style) -> std::fmt::Result {
+impl DisplayTree for Node<'_> {
+    fn fmt(&self, f: &mut Formatter, style: Style) -> std::fmt::Result {
         let indentation = style.indentation as usize - 1;
         let horizontal_bar = format!("{:indentation$}", style.char_set.horizontal);
 
         if NodeKind::from(self) != NodeKind::Rule {
             let name: &str = NodeKind::from(self).into();
-            writeln!(f, "{}", style.leaf_style.apply(name))?;
+            writeln!(f, "{} {}", style.leaf_style.apply(name), self.span())?;
         }
 
-        let spacer = format!(" {EMPTY_STRING:indentation$}");
-
         match self {
-            NodePayload::Terminal(s) => write!(
+            Node::Terminal { str, .. } => write!(
                 f,
                 "{}",
                 style.branch_style.apply(&format!(
                     "{}{horizontal_bar} '{}'",
                     style.char_set.end_connector,
-                    s.escape_debug()
+                    str.escape_debug()
                 ))
             )?,
-            NodePayload::Regex(s) | NodePayload::Nonterminal(s) => write!(
+            Node::Regex { pattern: s, .. } | Node::Nonterminal { name: s, .. } => write!(
                 f,
                 "{}",
                 style.branch_style.apply(&format!(
@@ -40,8 +38,8 @@ impl DisplayTree for NodePayload<'_> {
                     style.char_set.end_connector, s
                 ))
             )?,
-            NodePayload::UnparsedOperator(unparsed_operator) => {
-                let op: &str = unparsed_operator.into();
+            Node::UnparsedOperator { op, .. } => {
+                let op: &str = op.into();
                 write!(
                     f,
                     "{}",
@@ -52,58 +50,59 @@ impl DisplayTree for NodePayload<'_> {
                 )?;
             }
 
-            NodePayload::Choice(nodes)
-            | NodePayload::Optional(nodes)
-            | NodePayload::Repeated(nodes)
-            | NodePayload::List(nodes) => {
-                let vec_output = fmt_vec(nodes, style);
-                for (block_no, block) in vec_output.into_iter().enumerate() {
-                    for (n, line) in block.lines().enumerate() {
-                        if n == 0 && block_no == 0 {
-                            write!(f, "{}{horizontal_bar}", style.char_set.end_connector,)?;
-                        } else {
-                            write!(f, "{spacer}")?;
-                        }
-                        writeln!(f, "{line}")?;
-                    }
-                }
+            Node::Choice { body, .. }
+            | Node::Optional { body, .. }
+            | Node::Repeated { body, .. }
+            | Node::List { body, .. } => {
+                print_vec_tree(f, style, body)?;
             }
-            NodePayload::Rule(rule) => write!(f, "{}", AsTree::new(rule))?,
+            Node::Rule { rule, .. } => write!(f, "{}", AsTree::new(rule))?,
         }
         Ok(())
     }
 }
 
+pub(crate) fn print_vec_tree(
+    f: &mut impl Write,
+    style: Style,
+    body: &[Node<'_>],
+) -> Result<(), std::fmt::Error> {
+    let indentation = style.indentation as usize - 1;
+    let spacer = format!(" {EMPTY_STRING:indentation$}");
+    let horizontal_bar = format!("{:indentation$}", style.char_set.horizontal);
+    let vec_output = fmt_vec(body, style);
+
+    for (block_no, block) in vec_output.into_iter().enumerate() {
+        for (n, line) in block.lines().enumerate() {
+            if n == 0 && block_no == 0 {
+                write!(f, "{}{horizontal_bar}", style.char_set.end_connector,)?;
+            } else {
+                write!(f, "{spacer}")?;
+            }
+            writeln!(f, "{line}")?;
+        }
+    }
+    Ok(())
+}
+
 impl DisplayTree for Rule<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter, style: Style) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter, style: Style) -> std::fmt::Result {
         let indentation = style.indentation as usize - 1;
         let horizontal_bar = format!("{:indentation$}", style.char_set.horizontal);
-
-        let spacer = format!(" {EMPTY_STRING:indentation$}");
-
         writeln!(f, "{}", style.leaf_style.apply("Rule"))?;
         writeln!(
             f,
             "{1}{horizontal_bar}name: {0}",
             &self.name, style.char_set.connector
         )?;
-        let vec_output = fmt_vec(&self.body, style);
+        //let vec_output = fmt_vec(&self.body, style);
 
-        for (block_no, block) in vec_output.into_iter().enumerate() {
-            for (n, line) in block.lines().enumerate() {
-                if n == 0 && block_no == 0 {
-                    write!(f, "{}{horizontal_bar}", style.char_set.end_connector,)?;
-                } else {
-                    write!(f, "{spacer}")?;
-                }
-                writeln!(f, "{line}")?;
-            }
-        }
+        print_vec_tree(f, style, &self.body)?;
         Ok(())
     }
 }
 
-fn fmt_vec<T: DisplayTree>(v: &[T], style: Style) -> impl Iterator<Item = String> + '_ {
+pub(crate) fn fmt_vec<T: DisplayTree>(v: &[T], style: Style) -> impl Iterator<Item = String> + '_ {
     let max_index = v.len() - 1;
     let num_width = format!("{max_index}",).len();
 
@@ -137,74 +136,104 @@ fn fmt_vec<T: DisplayTree>(v: &[T], style: Style) -> impl Iterator<Item = String
 mod test {
 
     use super::*;
-    use crate::{nodes::Node, token_data::Span};
+    use crate::{
+        nodes::{Node, Operator},
+        token_data::DUMMY_SPAN,
+    };
     #[test]
     fn one_level_test() {
-        let span = Span { start: 0, end: 0 };
-        let strings: Vec<_> = (0..3).map(|n| format!("nonterm_{n}")).collect();
+        let span = DUMMY_SPAN;
 
-        let body: Vec<_> = (0..3)
-            .map(|n| Node {
+        let body = vec![
+            Node::Nonterminal {
                 span,
-                payload: NodePayload::Nonterminal(&strings[n]),
-            })
-            .collect();
-
-        let n = NodePayload::Rule(Rule { name: "name", body });
+                name: "Nonterm",
+            },
+            Node::Terminal { span, str: "Term" },
+            Node::UnparsedOperator {
+                span,
+                op: Operator::Equals,
+            },
+            Node::Choice {
+                span,
+                body: vec![
+                    Node::Optional {
+                        span,
+                        body: vec![Node::Regex { span, pattern: "." }],
+                    },
+                    Node::Repeated {
+                        span,
+                        body: vec![Node::Regex { span, pattern: "a" }],
+                        one_needed: true,
+                    },
+                ],
+            },
+        ];
+        let n = Node::Rule {
+            span,
+            rule: Rule { name: "name", body },
+        };
         let tree = AsTree::new(&n);
 
         insta::assert_snapshot!(tree, @r"
         Rule
         ├─name: name
-        └─0: Nonterminal [0..0]
-          │  └─ nonterm_0
-          1: Nonterminal [0..0]
-          │  └─ nonterm_1
-          2: Nonterminal [0..0]
-             └─ nonterm_2
+        └─0: Nonterminal [4294967294:0..4294967294:2]
+          │  └─ Nonterm
+          1: Terminal [4294967294:0..4294967294:2]
+          │  └─ 'Term'
+          2: UnparsedOperator [4294967294:0..4294967294:2]
+          │  └─ Equals
+          3: Choice [4294967294:0..4294967294:2]
+             └─0: Optional [4294967294:0..4294967294:2]
+               │  └─0: Regex [4294967294:0..4294967294:2]
+               │       └─ .
+               1: Repeated [4294967294:0..4294967294:2]
+                  └─0: Regex [4294967294:0..4294967294:2]
+                       └─ a
         ");
     }
 
     #[test]
     fn long_list_test() {
-        let span = Span { start: 0, end: 0 };
+        let span = DUMMY_SPAN;
         let strings: Vec<_> = (0..12).map(|n| format!("nonterm_{n}")).collect();
 
-        let vec: Vec<_> = (0..12)
-            .map(|n| Node {
+        let body: Vec<_> = (0..12)
+            .map(|n| Node::Nonterminal {
                 span,
-                payload: NodePayload::Nonterminal(&strings[n]),
+                name: &strings[n],
             })
             .collect();
 
-        let root = NodePayload::List(vec);
+        let root = Node::List { span, body };
         let tree = AsTree::new(&root);
 
         insta::assert_snapshot!(tree, @r"
-        List
-        └─00: Nonterminal [0..0]
+        List [4294967294:0..4294967294:2]
+        └─00: Nonterminal [4294967294:0..4294967294:2]
           │   └─ nonterm_0
-          01: Nonterminal [0..0]
+          01: Nonterminal [4294967294:0..4294967294:2]
           │   └─ nonterm_1
-          02: Nonterminal [0..0]
+          02: Nonterminal [4294967294:0..4294967294:2]
           │   └─ nonterm_2
-          03: Nonterminal [0..0]
+          03: Nonterminal [4294967294:0..4294967294:2]
           │   └─ nonterm_3
-          04: Nonterminal [0..0]
+          04: Nonterminal [4294967294:0..4294967294:2]
           │   └─ nonterm_4
-          05: Nonterminal [0..0]
+          05: Nonterminal [4294967294:0..4294967294:2]
           │   └─ nonterm_5
-          06: Nonterminal [0..0]
+          06: Nonterminal [4294967294:0..4294967294:2]
           │   └─ nonterm_6
-          07: Nonterminal [0..0]
+          07: Nonterminal [4294967294:0..4294967294:2]
           │   └─ nonterm_7
-          08: Nonterminal [0..0]
+          08: Nonterminal [4294967294:0..4294967294:2]
           │   └─ nonterm_8
-          09: Nonterminal [0..0]
+          09: Nonterminal [4294967294:0..4294967294:2]
           │   └─ nonterm_9
-          10: Nonterminal [0..0]
+          10: Nonterminal [4294967294:0..4294967294:2]
           │   └─ nonterm_10
-          11: Nonterminal [0..0]
+          11: Nonterminal [4294967294:0..4294967294:2]
               └─ nonterm_11
         ");
     }

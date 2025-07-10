@@ -1,8 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::{
-    Node, error::EbnfError, nodes::NodePayload, parse_rule_from_tokens, token_data::tokenize,
-};
+use crate::{Node, error::EbnfError, parse_rule_from_tokens, token_data::tokenize};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rule<'a> {
@@ -11,20 +9,32 @@ pub struct Rule<'a> {
 }
 
 impl<'a> Rule<'a> {
+    pub fn new(input: &str) -> Result<Rule<'_>, EbnfError> {
+        let tokens = tokenize(input)?;
+
+        let mut tokens_buffer = &tokens[..];
+        Ok(parse_rule_from_tokens(input, &mut tokens_buffer)?
+            .into_iter()
+            .next()
+            .unwrap())
+    }
+
     pub fn nonterminals(&self) -> Vec<&'a str> {
         #[allow(clippy::enum_glob_use)]
-        use NodePayload::*;
+        use Node::*;
         let mut stack: VecDeque<_> = self.body.iter().collect();
         let mut nonterm_names = vec![];
 
         while let Some(node) = stack.pop_front() {
-            match &node.payload {
-                Regex(_) | Terminal(_) => {}
-                UnparsedOperator(_) | Rule(_) => unreachable!(),
-                Choice(nodes) | Optional(nodes) | Repeated(nodes) | List(nodes) => {
-                    stack.extend(nodes);
-                }
-                Nonterminal(s) => nonterm_names.push(*s),
+            match node {
+                Regex { .. } | Terminal { .. } | UnparsedOperator { .. } => {}
+                Nonterminal { name, .. } => nonterm_names.push(*name),
+                Choice { body, .. }
+                | Optional { body, .. }
+                | Repeated { body, .. }
+                | List { body, .. } => stack.extend(body),
+
+                Rule { .. } => unreachable!(),
             }
         }
         nonterm_names
@@ -39,7 +49,7 @@ pub struct Grammar<'a> {
 impl Grammar<'_> {
     pub fn new(input: &str) -> Result<Grammar<'_>, EbnfError<'_>> {
         let tokens = tokenize(input)?;
-        eprintln!("{:?}", &tokens[14..20]);
+        //eprintln!("{:?}", &tokens[14..20]);
 
         let mut tokens_buffer = &tokens[..];
         let rules = parse_rule_from_tokens(input, &mut tokens_buffer)?;
@@ -71,34 +81,38 @@ impl<'a> FromIterator<Rule<'a>> for Grammar<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{Node, Span, nodes::NodePayload};
+    use crate::{Grammar, Node, Rule, token_data::DUMMY_SPAN};
 
     #[test]
     fn nonterminals_order() {
-        #[allow(clippy::enum_glob_use)]
-        use crate::nodes::NodePayload::*;
-        let span = Span { start: 0, end: 0 };
+        let span = DUMMY_SPAN;
         let body = vec![
-            Node {
+            Node::List {
                 span,
-                payload: List(vec![
-                    Node {
-                        span,
-                        payload: Nonterminal("A"),
-                    },
-                    Node {
-                        span,
-                        payload: Nonterminal("B"),
-                    },
-                ]),
+                body: vec![
+                    Node::Nonterminal { span, name: "A" },
+                    Node::Nonterminal { span, name: "B" },
+                ],
             },
-            Node {
-                span,
-                payload: Nonterminal("C"),
-            },
+            Node::Nonterminal { span, name: "C" },
         ];
 
-        let nonterms = super::Rule { body, name: "" }.nonterminals();
+        let nonterms = Rule { body, name: "" }.nonterminals();
         insta::assert_compact_debug_snapshot!(nonterms, @r#"["C", "A", "B"]"#);
+    }
+
+    #[test]
+    fn nonterminals_nested() {
+        let src = "Foo = (A|#'Hello'|'Goodbye'|B?)*;";
+        let nonterms = Rule::new(src).unwrap().nonterminals();
+        insta::assert_compact_debug_snapshot!(nonterms, @r#"["B", "A"]"#);
+    }
+
+    #[test]
+    fn dangling_refs() {
+        let src = "A = B;";
+        let g = Grammar::new(src).unwrap();
+        let first_dangling = g.get_dangling_reference();
+        insta::assert_compact_debug_snapshot!(first_dangling, @r#"Some(("A", "B"))"#);
     }
 }
