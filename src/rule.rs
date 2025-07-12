@@ -13,10 +13,10 @@ impl<'a> Rule<'a> {
         let tokens = tokenize(input)?;
 
         let mut tokens_buffer = &tokens[..];
-        Ok(parse_rule_from_tokens(input, &mut tokens_buffer)?
+        parse_rule_from_tokens(input, &mut tokens_buffer)?
             .into_iter()
             .next()
-            .unwrap())
+            .ok_or(EbnfError::EmptyInput)
     }
 
     pub fn nonterminals(&self) -> Vec<&'a str> {

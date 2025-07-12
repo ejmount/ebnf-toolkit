@@ -136,10 +136,7 @@ pub(crate) fn fmt_vec<T: DisplayTree>(v: &[T], style: Style) -> impl Iterator<It
 mod test {
 
     use super::*;
-    use crate::{
-        nodes::{Node, Operator},
-        token_data::DUMMY_SPAN,
-    };
+    use crate::{nodes::Operator, token_data::DUMMY_SPAN};
     #[test]
     fn one_level_test() {
         let span = DUMMY_SPAN;
