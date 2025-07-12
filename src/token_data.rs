@@ -145,9 +145,7 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, EbnfError<'_>> {
         let (line_count, last_newline_offset) = lexer.extras;
         if let Ok(payload) = payload {
             let Range { start, end } = s;
-            dbg!(start, last_newline_offset, payload);
             let line_offset_start = start - last_newline_offset;
-            dbg!(line_offset_start, start, last_newline_offset);
             let line_offset_end = end - last_newline_offset;
             #[allow(
                 clippy::cast_possible_truncation,
