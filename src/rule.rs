@@ -56,7 +56,7 @@ impl Grammar<'_> {
         Ok(rules.into_iter().collect())
     }
 
-    pub fn get_dangling_reference(&self) -> Option<(&str, &str)> {
+    pub fn first_dangling_reference(&self) -> Option<(&str, &str)> {
         for rule in self.rules.values() {
             let refers = rule.nonterminals();
             for r in refers {
@@ -112,7 +112,7 @@ mod test {
     fn dangling_refs() {
         let src = "A = B;";
         let g = Grammar::new(src).unwrap();
-        let first_dangling = g.get_dangling_reference();
+        let first_dangling = g.first_dangling_reference();
         insta::assert_compact_debug_snapshot!(first_dangling, @r#"Some(("A", "B"))"#);
     }
 }

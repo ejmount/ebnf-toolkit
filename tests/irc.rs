@@ -29,7 +29,7 @@ crlf            ::= '\r\n';
 fn irc_grammar() {
     let g = Grammar::new(SRC).unwrap_or_else(|e| panic!("{e}"));
 
-    assert_eq!(g.get_dangling_reference(), None);
+    assert_eq!(g.first_dangling_reference(), None);
 
     let rules = g.rules;
 
