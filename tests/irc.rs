@@ -7,7 +7,7 @@ tags          ::= tag [';' tag]*;
 tag           ::= key ['=' escaped_value];
 key           ::= [ client_prefix ] [ vendor '/' ] key_name;
 vendor        ::= #'[a-zA-Z0-9]+';
-key_name      ::= #'[a-zA-Z0-9]+';
+key_name      ::= #'[a-zA-Z0-9]+'; // this is a comment
 command       ::= #'[a-zA-Z0-9]+';
 escaped_value ::= #'[a-zA-Z0-9]+';
 client_prefix ::= '+';

@@ -86,6 +86,8 @@ impl Debug for Token<'_> {
 #[strum_discriminants(name(TokenKind), derive(VariantArray, Display, PartialOrd, Ord))]
 #[derive(Logos, Debug, Clone, Copy, PartialEq, Eq)]
 #[logos(skip "[[:space:]]")]
+#[logos(skip ",")]
+#[logos(skip "// [^\\n\\r]*")]
 #[logos(extras = (usize, usize))]
 pub enum TokenPayload<'a> {
     #[regex(r"[\w_]*")]
@@ -102,6 +104,7 @@ pub enum TokenPayload<'a> {
     #[token(";")]
     Termination,
     #[token("|")]
+    #[token("/")]
     Alternation,
     #[token("?")]
     Optional,
