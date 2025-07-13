@@ -53,7 +53,7 @@ impl DisplayTree for Node<'_> {
             Node::Choice { body, .. }
             | Node::Optional { body, .. }
             | Node::Repeated { body, .. }
-            | Node::List { body, .. } => {
+            | Node::Group { body, .. } => {
                 print_vec_tree(f, style, body)?;
             }
             Node::Rule { rule, .. } => write!(f, "{}", AsTree::new(rule))?,
@@ -203,11 +203,11 @@ mod test {
             })
             .collect();
 
-        let root = Node::List { span, body };
+        let root = Node::Group { span, body };
         let tree = AsTree::new(&root);
 
         insta::assert_snapshot!(tree, @r"
-        List [4294967294:0..4294967294:2]
+        Group [4294967294:0..4294967294:2]
         └─00: Nonterminal [4294967294:0..4294967294:2]
           │   └─ nonterm_0
           01: Nonterminal [4294967294:0..4294967294:2]

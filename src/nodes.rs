@@ -30,7 +30,7 @@ pub enum Node<'a> {
         span: Span,
         pattern: &'a str,
     },
-    List {
+    Group {
         span: Span,
         body: Vec<Node<'a>>,
     },
@@ -53,7 +53,7 @@ impl Node<'_> {
             | Node::Optional { span, .. }
             | Node::Repeated { span, .. }
             | Node::Regex { span, .. }
-            | Node::List { span, .. }
+            | Node::Group { span, .. }
             | Node::UnparsedOperator { span, .. }
             | Node::Rule { span, .. } => *span,
         }

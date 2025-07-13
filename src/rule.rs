@@ -32,7 +32,7 @@ impl<'a> Rule<'a> {
                 Choice { body, .. }
                 | Optional { body, .. }
                 | Repeated { body, .. }
-                | List { body, .. } => stack.extend(body),
+                | Group { body, .. } => stack.extend(body),
 
                 Rule { .. } => unreachable!(),
             }
@@ -87,7 +87,7 @@ mod test {
     fn nonterminals() {
         let span = DUMMY_SPAN;
         let body = vec![
-            Node::List {
+            Node::Group {
                 span,
                 body: vec![
                     Node::Nonterminal { span, name: "A" },

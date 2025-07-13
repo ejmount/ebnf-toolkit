@@ -128,14 +128,10 @@ impl Display for EbnfError<'_> {
             } => {
                 match reason.as_ref().unwrap() {
                     FailureReason::ExhaustedInput(nodes) => {
-                        let mut nodes = nodes.clone();
-                        report = report.with_message("Parse error: Unexpected end of input");
-                        nodes.reverse();
-                        let mut tree_output = String::new();
-                        print_vec_tree(&mut tree_output, Style::default(), &nodes).unwrap();
-                        report = report.with_note(format!(
-                            "The parse stack looked like this (most recent on top):\n{tree_output}",
+                        report = report.with_message(format!(
+                            "Parse error: Unexpected end of input at {start}-{end:?}"
                         ));
+                        report = print_stack(report, nodes);
                     }
 
                     FailureReason::InvalidRuleStart(incorrect_node) => {
@@ -143,7 +139,7 @@ impl Display for EbnfError<'_> {
                             NodeKind::Terminal => "string literal",
                             NodeKind::Regex => "regular expression",
                             NodeKind::UnparsedOperator => "operator",
-                            NodeKind::List => "list of terms", // unreachable?
+                            NodeKind::Group => "list of terms", // unreachable?
                             NodeKind::Choice => "alternatives",
                             NodeKind::Repeated => "repetition",
                             NodeKind::Optional => "optional",
@@ -175,19 +171,14 @@ impl Display for EbnfError<'_> {
                                 }
                             }
                         }
-                        let mut nodes = nodes.clone();
-                        nodes.reverse();
-                        let mut tree_output = String::new();
-                        print_vec_tree(&mut tree_output, Style::default(), &nodes).unwrap();
-                        report = report
-                        .with_label(
+                        report = report.with_label(
                             Label::new(("<input>", *start..end.unwrap_or(start + 1)))
                                 .with_message(
                                     "Rule ending here did not parse successfully".to_string(),
                                 )
                                 .with_color(col),
-                        )
-                        .with_note(format!("The parse stack looked like this (most recent on top):\n{tree_output}",));
+                        );
+                        report = print_stack(report, nodes);
                     }
                 }
             }
@@ -202,4 +193,17 @@ impl Display for EbnfError<'_> {
 
         Ok(())
     }
+}
+
+fn print_stack<'a>(
+    report: ariadne::ReportBuilder<'a, (&'static str, std::ops::Range<usize>)>,
+    nodes: &[Node<'_>],
+) -> ariadne::ReportBuilder<'a, (&'static str, std::ops::Range<usize>)> {
+    let mut nodes: Vec<_> = nodes.to_vec();
+    nodes.reverse();
+    let mut tree_output = String::new();
+    print_vec_tree(&mut tree_output, Style::default(), &nodes).unwrap();
+    report.with_note(format!(
+        "The parse stack looked like this (most recent on top):\n{tree_output}",
+    ))
 }

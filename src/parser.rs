@@ -98,7 +98,7 @@ mod rules {
     pub(super) fn list<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
         let (body, span, size) = filter_parsed(nodes);
 
-        (Node::List { span, body }, size)
+        (Node::Group { span, body }, size)
     }
 
     pub(super) fn rule<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
