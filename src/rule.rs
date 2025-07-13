@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::{Node, error::EbnfError, parse_rule_from_tokens, token_data::tokenize};
+use crate::{Node, error::EbnfError, parse_rules_from_tokens, token_data::tokenize};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rule<'a> {
@@ -13,7 +13,7 @@ impl<'a> Rule<'a> {
         let tokens = tokenize(input)?;
 
         let mut tokens_buffer = &tokens[..];
-        parse_rule_from_tokens(input, &mut tokens_buffer)?
+        parse_rules_from_tokens(input, &mut tokens_buffer)?
             .into_iter()
             .next()
             .ok_or(EbnfError::EmptyInput)
@@ -52,7 +52,7 @@ impl Grammar<'_> {
         //eprintln!("{:?}", &tokens[14..20]);
 
         let mut tokens_buffer = &tokens[..];
-        let rules = parse_rule_from_tokens(input, &mut tokens_buffer)?;
+        let rules = parse_rules_from_tokens(input, &mut tokens_buffer)?;
         Ok(rules.into_iter().collect())
     }
 

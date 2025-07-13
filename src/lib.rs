@@ -27,7 +27,7 @@ use crate::{
     token_data::{Token, TokenPayload},
 };
 
-fn parse_rule_from_tokens<'a>(
+fn parse_rules_from_tokens<'a>(
     input: &'a str,
     input_tokens: &mut &[Token<'a>],
 ) -> Result<Vec<Rule<'a>>, EbnfError<'a>> {
@@ -44,8 +44,8 @@ fn parse_rule_from_tokens<'a>(
     let mut end_of_rule_expected = None;
 
     for n in 0..num_tokens {
-        // During the shift-reduce cycle, the lookahead is used to ensure reductions are greedy, but is never incorporated into the reduced node itself.
-        // This means there needs to be exactly one round of reducing where there is no lookhead token, because the final token may be part of a reduction. (But since every round repeatedly reduces until a shift is needed, a second empty lookahead would be a waste)
+        // There needs to be exactly one round of reducing where there is no remaining input, because the final token may be part of a reduction.
+        // So this loop is half a cycle off of the intuitive shift-reduce order
 
         stack.reduce_until_shift_needed().map_err(|(stack, n)| {
             EbnfError::from_parse_error(
@@ -75,7 +75,7 @@ fn parse_rule_from_tokens<'a>(
             let Node::Rule { rule, .. } = stack.pop_node().unwrap() else {
                 unreachable!()
             };
-            outputs.push(rule);
+            outputs.push(tidy_up_rule(rule));
         }
 
         if let Some(new_token) = input_tokens.split_off_first() {
@@ -99,8 +99,40 @@ fn parse_rule_from_tokens<'a>(
     }
 }
 
+fn tidy_up_rule(r: Rule) -> Rule {
+    let Rule { name, body } = r;
+    let body = body.into_iter().map(flatten_choices).collect();
+    Rule { name, body }
+}
+
+fn flatten_choices(n: Node) -> Node {
+    match n {
+        Node::Choice { span, body } => {
+            if body.iter().any(|m| matches!(m, Node::Choice { .. })) {
+                let mut outputs = vec![];
+                for child in body.into_iter().map(flatten_choices) {
+                    match child {
+                        Node::Choice { body, .. } => outputs.extend(body),
+                        other => outputs.push(other),
+                    }
+                }
+                let span = outputs.iter().map(Node::span).reduce(Span::union).unwrap();
+                Node::Choice {
+                    span,
+                    body: outputs,
+                }
+            } else {
+                Node::Choice { span, body }
+            }
+        }
+        other => other,
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use display_tree::format_tree;
+
     use crate::Rule;
 
     #[test]
@@ -112,5 +144,33 @@ mod tests {
 
         //let tree = format_tree!(parse);
         insta::assert_compact_debug_snapshot!(parse, @r#"Rule { name: "message", body: [Optional { span: Span { start: 18, end: 34, line_offset_start: (1, 18), line_offset_end: (1, 34) }, body: [Terminal { span: Span { start: 19, end: 22, line_offset_start: (1, 19), line_offset_end: (1, 22) }, str: "@" }, Nonterminal { span: Span { start: 23, end: 27, line_offset_start: (1, 23), line_offset_end: (1, 27) }, name: "tags" }, Nonterminal { span: Span { start: 28, end: 33, line_offset_start: (1, 28), line_offset_end: (1, 33) }, name: "SPACE" }] }, Optional { span: Span { start: 35, end: 54, line_offset_start: (1, 35), line_offset_end: (1, 54) }, body: [Terminal { span: Span { start: 36, end: 39, line_offset_start: (1, 36), line_offset_end: (1, 39) }, str: ":" }, Nonterminal { span: Span { start: 40, end: 46, line_offset_start: (1, 40), line_offset_end: (1, 46) }, name: "source" }, Nonterminal { span: Span { start: 47, end: 52, line_offset_start: (1, 47), line_offset_end: (1, 52) }, name: "SPACE" }] }, Nonterminal { span: Span { start: 55, end: 62, line_offset_start: (1, 55), line_offset_end: (1, 62) }, name: "command" }, Optional { span: Span { start: 63, end: 75, line_offset_start: (1, 63), line_offset_end: (1, 75) }, body: [Nonterminal { span: Span { start: 64, end: 74, line_offset_start: (1, 64), line_offset_end: (1, 74) }, name: "parameters" }] }, Nonterminal { span: Span { start: 76, end: 80, line_offset_start: (1, 76), line_offset_end: (1, 80) }, name: "crlf" }] }"#);
+    }
+
+    #[test]
+    fn flatten_success() {
+        let src = "success = A | (B | C) | D | E | F;";
+
+        let parse = Rule::new(src).unwrap_or_else(|e| panic!("{e}"));
+
+        let tree = format_tree!(parse);
+        insta::assert_snapshot!(tree, @r"
+        Rule
+        ├─name: success
+        └─0: Choice [1:10..1:33]
+             └─0: Nonterminal [1:10..1:11]
+               │  └─ A
+               1: Group [1:14..1:21]
+               │  └─0: Choice [1:15..1:20]
+               │       └─0: Nonterminal [1:15..1:16]
+               │         │  └─ B
+               │         1: Nonterminal [1:19..1:20]
+               │            └─ C
+               2: Nonterminal [1:24..1:25]
+               │  └─ D
+               3: Nonterminal [1:28..1:29]
+               │  └─ E
+               4: Nonterminal [1:32..1:33]
+                  └─ F
+        ");
     }
 }
