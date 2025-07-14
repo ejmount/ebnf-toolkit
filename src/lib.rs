@@ -101,7 +101,11 @@ fn parse_rules_from_tokens<'a>(
 
 fn tidy_up_rule(r: Rule) -> Rule {
     let Rule { name, body } = r;
-    let body = body.into_iter().map(flatten_choices).collect();
+    let body = body
+        .into_iter()
+        .map(flatten_choices)
+        .map(flatten_repeats)
+        .collect();
     Rule { name, body }
 }
 
@@ -122,9 +126,40 @@ fn flatten_choices(n: Node) -> Node {
                     body: outputs,
                 }
             } else {
+                let body = body.into_iter().map(flatten_choices).collect();
                 Node::Choice { span, body }
             }
         }
+        other => flatten_choices(other),
+    }
+}
+
+fn flatten_repeats(n: Node) -> Node {
+    match n {
+        Node::Repeated {
+            span,
+            mut body,
+            one_needed,
+        } => {
+            if let [Node::Group { .. }] = &body[..] {
+                let Some(Node::Group { body, span }) = body.pop() else {
+                    unreachable!()
+                };
+                Node::Repeated {
+                    span,
+                    body,
+                    one_needed,
+                }
+            } else {
+                let body = body.into_iter().map(flatten_choices).collect();
+                Node::Repeated {
+                    span,
+                    body,
+                    one_needed,
+                }
+            }
+        }
+
         other => other,
     }
 }

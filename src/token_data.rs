@@ -77,7 +77,8 @@ impl Debug for Token<'_> {
                 write!(f, "(\"{}\")", s.escape_debug())
             }
             Kleene | Repeat | Equals | Termination | Alternation | Optional | OpeningGroup
-            | ClosingGroup | OpeningSquare | ClosingSquare | Newline => Ok(()),
+            | ClosingGroup | OpeningSquare | ClosingSquare | OpeningBrace | ClosingBrace
+            | Newline => Ok(()),
         }
     }
 }
@@ -120,6 +121,10 @@ pub enum TokenPayload<'a> {
     OpeningSquare,
     #[token("]")]
     ClosingSquare,
+    #[token("{")]
+    OpeningBrace,
+    #[token("}")]
+    ClosingBrace,
     #[token("\n", line_counter, priority = 20)]
     #[token("\r", line_counter, priority = 20)]
     #[token("\r\n", line_counter)]

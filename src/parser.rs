@@ -26,13 +26,14 @@ const NON_OPERATOR: &str = "[A-Za-z]";
 
 /// Regexes over the token types for each reduction rule.
 /// NB: regex operators will be interpreted as usual, a grammar operator needs escaped
-static REDUCTION_PATTERNS: LazyLock<[(Regex, Reducer); 7]> = LazyLock::new(|| {
+static REDUCTION_PATTERNS: LazyLock<[(Regex, Reducer); 8]> = LazyLock::new(|| {
     [
         (decode_rule_regex(r"Any (\| Any)+"), rules::choice),
         (decode_rule_regex(r"\[Any+\]"), rules::option),
         (decode_rule_regex(r"Any\?"), rules::option),
         (decode_rule_regex(r"Any\*"), rules::repeat),
         (decode_rule_regex(r"Any\+"), rules::repeat),
+        (decode_rule_regex(r"{Any}"), rules::repeat),
         (decode_rule_regex(r"\(Any+\)"), rules::list),
         (decode_rule_regex(r"Nonterminal = Any+;"), rules::rule),
     ]
@@ -82,7 +83,7 @@ mod rules {
                     body,
                     one_needed: false,
                 },
-                Operator::Repeat => Node::Repeated {
+                Operator::ClosedBrace | Operator::Repeat => Node::Repeated {
                     span,
                     body,
                     one_needed: true,
@@ -155,6 +156,8 @@ impl<'a> LrStack<'a> {
         let op_node = |op| Node::UnparsedOperator { op, span };
         let node = match payload {
             Alternation => op_node(Op::Alternation),
+            OpeningBrace => op_node(Op::OpenedBrace),
+            ClosingBrace => op_node(Op::ClosedBrace),
             OpeningSquare => op_node(Op::OpenedSquare),
             ClosingSquare => op_node(Op::ClosedSquare),
             Equals => op_node(Op::Equals),

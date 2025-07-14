@@ -79,6 +79,10 @@ pub enum Operator {
     OpenedSquare,
     #[strum(props(string = "]"))]
     ClosedSquare,
+    #[strum(props(string = "{"))]
+    OpenedBrace,
+    #[strum(props(string = "}"))]
+    ClosedBrace,
     #[strum(props(string = ";"))]
     Terminator,
     #[strum(props(string = "="))]
