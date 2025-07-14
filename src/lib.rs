@@ -57,6 +57,7 @@ fn parse_rules_from_tokens<'a>(
             )
         })?;
 
+        #[cfg(debug_assertions)]
         if Some(n) == end_of_rule_expected && !matches!(stack.peek_node(), Some(Node::Rule { .. }))
         {
             let offset = stack.peek_node().unwrap().span().start();
