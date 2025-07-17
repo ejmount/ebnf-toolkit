@@ -15,6 +15,7 @@ mod error;
 mod nodes;
 mod parser;
 mod rule;
+mod simplification;
 mod token_data;
 
 pub use error::{EbnfError, FailureReason};
@@ -24,6 +25,7 @@ pub use token_data::Span;
 
 use crate::{
     parser::LrStack,
+    simplification::tidy_up_rule,
     token_data::{Token, TokenPayload},
 };
 
@@ -97,71 +99,6 @@ fn parse_rules_from_tokens<'a>(
             None,
             Some(reason),
         ))
-    }
-}
-
-fn tidy_up_rule(r: Rule) -> Rule {
-    let Rule { name, body } = r;
-    let body = body
-        .into_iter()
-        .map(flatten_choices)
-        .map(flatten_repeats)
-        .collect();
-    Rule { name, body }
-}
-
-fn flatten_choices(n: Node) -> Node {
-    match n {
-        Node::Choice { span, body } => {
-            if body.iter().any(|m| matches!(m, Node::Choice { .. })) {
-                let mut outputs = vec![];
-                for child in body.into_iter().map(flatten_choices) {
-                    match child {
-                        Node::Choice { body, .. } => outputs.extend(body),
-                        other => outputs.push(other),
-                    }
-                }
-                let span = outputs.iter().map(Node::span).reduce(Span::union).unwrap();
-                Node::Choice {
-                    span,
-                    body: outputs,
-                }
-            } else {
-                let body = body.into_iter().map(flatten_choices).collect();
-                Node::Choice { span, body }
-            }
-        }
-        other => flatten_choices(other),
-    }
-}
-
-fn flatten_repeats(n: Node) -> Node {
-    match n {
-        Node::Repeated {
-            span,
-            mut body,
-            one_needed,
-        } => {
-            if let [Node::Group { .. }] = &body[..] {
-                let Some(Node::Group { body, span }) = body.pop() else {
-                    unreachable!()
-                };
-                Node::Repeated {
-                    span,
-                    body,
-                    one_needed,
-                }
-            } else {
-                let body = body.into_iter().map(flatten_choices).collect();
-                Node::Repeated {
-                    span,
-                    body,
-                    one_needed,
-                }
-            }
-        }
-
-        other => other,
     }
 }
 

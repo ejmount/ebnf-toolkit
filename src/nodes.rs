@@ -67,9 +67,41 @@ impl Node<'_> {
             &name[..1]
         }
     }
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumProperty, IntoStaticStr)]
+    pub(crate) fn apply_replacement(
+        &mut self,
+        func: &mut impl for<'a> FnMut(&Node<'a>) -> Option<Node<'a>>,
+        //has_modifed: &mut bool,
+    ) {
+        match self {
+            Node::Rule {
+                span,
+                rule: Rule { body, .. },
+            }
+            | Node::Choice { span, body }
+            | Node::Optional { span, body }
+            | Node::Repeated { span, body, .. }
+            | Node::Group { span, body } => {
+                for n in body.iter_mut() {
+                    if let Some(new) = func(n) {
+                        *n = new;
+                    }
+                    n.apply_replacement(func);
+                }
+                *span = body.iter().map(Node::span).reduce(Span::union).unwrap();
+            }
+
+            Node::Regex { .. }
+            | Node::UnparsedOperator { .. }
+            | Node::Terminal { .. }
+            | Node::Nonterminal { .. } => { /* no children, do nothing */ }
+        }
+        let res = func(self);
+        if let Some(res) = res {
+            *self = res;
+        }
+    }
+}
 pub enum Operator {
     #[strum(props(string = "("))]
     OpenedGroup,

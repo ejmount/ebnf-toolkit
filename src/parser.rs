@@ -33,7 +33,7 @@ static REDUCTION_PATTERNS: LazyLock<[(Regex, Reducer); 8]> = LazyLock::new(|| {
         (decode_rule_regex(r"Any\?"), rules::option),
         (decode_rule_regex(r"Any\*"), rules::repeat),
         (decode_rule_regex(r"Any\+"), rules::repeat),
-        (decode_rule_regex(r"{Any}"), rules::repeat),
+        (decode_rule_regex(r"\{Any\}"), rules::repeat),
         (decode_rule_regex(r"\(Any+\)"), rules::list),
         (decode_rule_regex(r"Nonterminal = Any+;"), rules::rule),
     ]
