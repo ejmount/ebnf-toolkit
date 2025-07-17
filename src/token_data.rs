@@ -4,6 +4,7 @@ use std::{
 };
 
 use logos::{Lexer, Logos, Skip};
+use proptest_derive::Arbitrary;
 use strum::{Display, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantArray};
 
 use crate::error::EbnfError;
@@ -16,7 +17,7 @@ pub(crate) const DUMMY_SPAN: Span = Span {
     line_offset_end: (u32::MAX - 1, 2),
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Arbitrary)]
 pub struct Span {
     start: usize,
     end: usize,
