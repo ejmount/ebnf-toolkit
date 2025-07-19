@@ -2,4 +2,4 @@
 source: tests/irc.rs
 expression: "rules.get(\"command\").unwrap()"
 ---
-Rule { name: "command", body: [Regex { span: Span { start: 309, end: 324, line_offset_start: (8, 18), line_offset_end: (8, 33) }, pattern: "[a-zA-Z0-9]+" }] }
+Rule { name: "command", body: [Regex { span: Span { start: 330, end: 345, line_offset_start: (8, 18), line_offset_end: (8, 33) }, pattern: "[a-zA-Z0-9]+" }] }

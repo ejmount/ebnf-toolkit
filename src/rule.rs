@@ -105,7 +105,7 @@ mod test {
     fn nonterminals_nested() {
         let src = "Foo = (A|#'Hello'|'Goodbye'|B?)*;";
         let nonterms = Rule::new(src).unwrap().nonterminals();
-        insta::assert_compact_debug_snapshot!(nonterms, @r#"["B", "A"]"#);
+        insta::assert_compact_debug_snapshot!(nonterms, @r#"["A", "B"]"#);
     }
 
     #[test]

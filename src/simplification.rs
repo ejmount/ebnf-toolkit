@@ -94,8 +94,9 @@ mod test {
             ],
         };
 
-    let mut simplified = val.clone();
-    simplify_node(&mut simplified);
+        let mut simplified = val.clone();
+        simplify_node(&mut simplified);
 
-    println!("{}", AsTree::new(&simplified));
+        println!("{}", AsTree::new(&simplified));
+    }
 }

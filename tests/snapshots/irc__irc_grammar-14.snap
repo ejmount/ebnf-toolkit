@@ -2,4 +2,4 @@
 source: tests/irc.rs
 expression: "rules.get(\"host\").unwrap()"
 ---
-Rule { name: "host", body: [Regex { span: Span { start: 629, end: 645, line_offset_start: (16, 21), line_offset_end: (16, 37) }, pattern: "[a-zA-Z0-9.]+" }] }
+Rule { name: "host", body: [Regex { span: Span { start: 650, end: 666, line_offset_start: (16, 21), line_offset_end: (16, 37) }, pattern: "[a-zA-Z0-9.]+" }] }

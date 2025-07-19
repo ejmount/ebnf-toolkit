@@ -2,4 +2,4 @@
 source: tests/irc.rs
 expression: "rules.get(\"nick\").unwrap()"
 ---
-Rule { name: "nick", body: [Regex { span: Span { start: 506, end: 534, line_offset_start: (13, 21), line_offset_end: (13, 49) }, pattern: "[^ \\\\0\\r\\n #][^\\\\0\\r\\n ]*" }] }
+Rule { name: "nick", body: [Regex { span: Span { start: 527, end: 555, line_offset_start: (13, 21), line_offset_end: (13, 49) }, pattern: "[^ \\\\0\\r\\n #][^\\\\0\\r\\n ]*" }] }

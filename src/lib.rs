@@ -18,10 +18,12 @@ mod rule;
 mod simplification;
 mod token_data;
 
-pub use error::{EbnfError, FailureReason};
-pub use nodes::Node;
-pub use rule::{Grammar, Rule};
-pub use token_data::Span;
+pub use crate::{
+    error::{EbnfError, FailureReason},
+    nodes::Node,
+    rule::{Grammar, Rule},
+    token_data::Span,
+};
 
 use crate::{
     parser::LrStack,
@@ -117,6 +119,9 @@ mod tests {
 
         let parse = Rule::new(src).unwrap_or_else(|e| panic!("{e}"));
 
+        insta::assert_compact_debug_snapshot!(parse, @r#"Rule { name: "message", body: [Optional { span: Span { start: 19, end: 33, line_offset_start: (1, 19), line_offset_end: (1, 33) }, body: [Terminal { span: Span { start: 19, end: 22, line_offset_start: (1, 19), line_offset_end: (1, 22) }, str: "@" }, Nonterminal { span: Span { start: 23, end: 27, line_offset_start: (1, 23), line_offset_end: (1, 27) }, name: "tags" }, Nonterminal { span: Span { start: 28, end: 33, line_offset_start: (1, 28), line_offset_end: (1, 33) }, name: "SPACE" }] }, Optional { span: Span { start: 36, end: 52, line_offset_start: (1, 36), line_offset_end: (1, 52) }, body: [Terminal { span: Span { start: 36, end: 39, line_offset_start: (1, 36), line_offset_end: (1, 39) }, str: ":" }, Nonterminal { span: Span { start: 40, end: 46, line_offset_start: (1, 40), line_offset_end: (1, 46) }, name: "source" }, Nonterminal { span: Span { start: 47, end: 52, line_offset_start: (1, 47), line_offset_end: (1, 52) }, name: "SPACE" }] }, Nonterminal { span: Span { start: 55, end: 62, line_offset_start: (1, 55), line_offset_end: (1, 62) }, name: "command" }, Optional { span: Span { start: 64, end: 74, line_offset_start: (1, 64), line_offset_end: (1, 74) }, body: [Nonterminal { span: Span { start: 64, end: 74, line_offset_start: (1, 64), line_offset_end: (1, 74) }, name: "parameters" }] }, Nonterminal { span: Span { start: 76, end: 80, line_offset_start: (1, 76), line_offset_end: (1, 80) }, name: "crlf" }] }"#);
+    }
+
     #[test]
     fn basic_span_check() {
         let src = "message       ::= hello;";
@@ -140,17 +145,15 @@ mod tests {
         └─0: Choice [1:10..1:33]
              └─0: Nonterminal [1:10..1:11]
                │  └─ A
-               1: Group [1:14..1:21]
-               │  └─0: Choice [1:15..1:20]
-               │       └─0: Nonterminal [1:15..1:16]
-               │         │  └─ B
-               │         1: Nonterminal [1:19..1:20]
-               │            └─ C
-               2: Nonterminal [1:24..1:25]
+               1: Nonterminal [1:15..1:16]
+               │  └─ B
+               2: Nonterminal [1:19..1:20]
+               │  └─ C
+               3: Nonterminal [1:24..1:25]
                │  └─ D
-               3: Nonterminal [1:28..1:29]
+               4: Nonterminal [1:28..1:29]
                │  └─ E
-               4: Nonterminal [1:32..1:33]
+               5: Nonterminal [1:32..1:33]
                   └─ F
         ");
     }
