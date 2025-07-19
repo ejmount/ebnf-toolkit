@@ -12,7 +12,7 @@
 
 mod debug;
 mod error;
-mod nodes;
+mod expr;
 mod parser;
 mod rule;
 mod simplification;
@@ -20,7 +20,7 @@ mod token_data;
 
 pub use crate::{
     error::{EbnfError, FailureReason},
-    nodes::Node,
+    expr::Expr,
     rule::{Grammar, Rule},
     token_data::Span,
 };
@@ -62,7 +62,7 @@ fn parse_rules_from_tokens<'a>(
         })?;
 
         #[cfg(debug_assertions)]
-        if Some(n) == end_of_rule_expected && !matches!(stack.peek_node(), Some(Node::Rule { .. }))
+        if Some(n) == end_of_rule_expected && !matches!(stack.peek_node(), Some(Expr::Rule { .. }))
         {
             let offset = stack.peek_node().unwrap().span().start();
             return Err(EbnfError::from_parse_error(
@@ -76,10 +76,10 @@ fn parse_rules_from_tokens<'a>(
             ));
         }
 
-        if let Some(Node::Rule { .. }) = stack.peek_node() {
+        if let Some(Expr::Rule { .. }) = stack.peek_node() {
             let mut rule_node = stack.pop_node().unwrap();
             simplify_node(&mut rule_node);
-            let Node::Rule { rule, .. } = rule_node else {
+            let Expr::Rule { rule, .. } = rule_node else {
                 unreachable!()
             };
             outputs.push(rule);
@@ -119,7 +119,7 @@ mod tests {
 
         let parse = Rule::new(src).unwrap_or_else(|e| panic!("{e}"));
 
-        insta::assert_compact_debug_snapshot!(parse, @r#"Rule { name: "message", body: [Optional { span: Span { start: 19, end: 33, line_offset_start: (1, 19), line_offset_end: (1, 33) }, body: [Terminal { span: Span { start: 19, end: 22, line_offset_start: (1, 19), line_offset_end: (1, 22) }, str: "@" }, Nonterminal { span: Span { start: 23, end: 27, line_offset_start: (1, 23), line_offset_end: (1, 27) }, name: "tags" }, Nonterminal { span: Span { start: 28, end: 33, line_offset_start: (1, 28), line_offset_end: (1, 33) }, name: "SPACE" }] }, Optional { span: Span { start: 36, end: 52, line_offset_start: (1, 36), line_offset_end: (1, 52) }, body: [Terminal { span: Span { start: 36, end: 39, line_offset_start: (1, 36), line_offset_end: (1, 39) }, str: ":" }, Nonterminal { span: Span { start: 40, end: 46, line_offset_start: (1, 40), line_offset_end: (1, 46) }, name: "source" }, Nonterminal { span: Span { start: 47, end: 52, line_offset_start: (1, 47), line_offset_end: (1, 52) }, name: "SPACE" }] }, Nonterminal { span: Span { start: 55, end: 62, line_offset_start: (1, 55), line_offset_end: (1, 62) }, name: "command" }, Optional { span: Span { start: 64, end: 74, line_offset_start: (1, 64), line_offset_end: (1, 74) }, body: [Nonterminal { span: Span { start: 64, end: 74, line_offset_start: (1, 64), line_offset_end: (1, 74) }, name: "parameters" }] }, Nonterminal { span: Span { start: 76, end: 80, line_offset_start: (1, 76), line_offset_end: (1, 80) }, name: "crlf" }] }"#);
+        insta::assert_compact_debug_snapshot!(parse, @r#"Rule { name: "message", body: [Optional { span: Span { start: 19, end: 33, line_offset_start: (1, 19), line_offset_end: (1, 33) }, body: [Literal { span: Span { start: 19, end: 22, line_offset_start: (1, 19), line_offset_end: (1, 22) }, str: "@" }, Nonterminal { span: Span { start: 23, end: 27, line_offset_start: (1, 23), line_offset_end: (1, 27) }, name: "tags" }, Nonterminal { span: Span { start: 28, end: 33, line_offset_start: (1, 28), line_offset_end: (1, 33) }, name: "SPACE" }] }, Optional { span: Span { start: 36, end: 52, line_offset_start: (1, 36), line_offset_end: (1, 52) }, body: [Literal { span: Span { start: 36, end: 39, line_offset_start: (1, 36), line_offset_end: (1, 39) }, str: ":" }, Nonterminal { span: Span { start: 40, end: 46, line_offset_start: (1, 40), line_offset_end: (1, 46) }, name: "source" }, Nonterminal { span: Span { start: 47, end: 52, line_offset_start: (1, 47), line_offset_end: (1, 52) }, name: "SPACE" }] }, Nonterminal { span: Span { start: 55, end: 62, line_offset_start: (1, 55), line_offset_end: (1, 62) }, name: "command" }, Optional { span: Span { start: 64, end: 74, line_offset_start: (1, 64), line_offset_end: (1, 74) }, body: [Nonterminal { span: Span { start: 64, end: 74, line_offset_start: (1, 64), line_offset_end: (1, 74) }, name: "parameters" }] }, Nonterminal { span: Span { start: 76, end: 80, line_offset_start: (1, 76), line_offset_end: (1, 80) }, name: "crlf" }] }"#);
     }
 
     #[test]

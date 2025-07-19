@@ -3,9 +3,9 @@ use std::fmt::Display;
 use strum::{EnumDiscriminants, EnumProperty, IntoStaticStr, VariantNames};
 
 #[derive(Debug, Clone, PartialEq, Eq, EnumDiscriminants)]
-#[strum_discriminants(name(NodeKind), derive(VariantNames, IntoStaticStr))]
-pub enum Node<'a> {
-    Terminal {
+#[strum_discriminants(name(ExprKind), derive(VariantNames, IntoStaticStr))]
+pub enum Expr<'a> {
+    Literal {
         span: Span,
         str: &'a str,
     },
@@ -15,15 +15,15 @@ pub enum Node<'a> {
     },
     Choice {
         span: Span,
-        body: Vec<Node<'a>>,
+        body: Vec<Expr<'a>>,
     },
     Optional {
         span: Span,
-        body: Vec<Node<'a>>,
+        body: Vec<Expr<'a>>,
     },
-    Repeated {
+    Repetition {
         span: Span,
-        body: Vec<Node<'a>>,
+        body: Vec<Expr<'a>>,
         one_needed: bool,
     },
     Regex {
@@ -32,7 +32,7 @@ pub enum Node<'a> {
     },
     Group {
         span: Span,
-        body: Vec<Node<'a>>,
+        body: Vec<Expr<'a>>,
     },
     UnparsedOperator {
         span: Span,
@@ -44,44 +44,44 @@ pub enum Node<'a> {
     },
 }
 
-impl Node<'_> {
+impl Expr<'_> {
     pub fn span(&self) -> Span {
         match self {
-            Node::Terminal { span, .. }
-            | Node::Nonterminal { span, .. }
-            | Node::Choice { span, .. }
-            | Node::Optional { span, .. }
-            | Node::Repeated { span, .. }
-            | Node::Regex { span, .. }
-            | Node::Group { span, .. }
-            | Node::UnparsedOperator { span, .. }
-            | Node::Rule { span, .. } => *span,
+            Expr::Literal { span, .. }
+            | Expr::Nonterminal { span, .. }
+            | Expr::Choice { span, .. }
+            | Expr::Optional { span, .. }
+            | Expr::Repetition { span, .. }
+            | Expr::Regex { span, .. }
+            | Expr::Group { span, .. }
+            | Expr::UnparsedOperator { span, .. }
+            | Expr::Rule { span, .. } => *span,
         }
     }
 
     pub(crate) fn node_pattern_code(&self) -> &'static str {
-        if let Node::UnparsedOperator { op, .. } = self {
+        if let Expr::UnparsedOperator { op, .. } = self {
             op.get_str("string").unwrap()
         } else {
-            let name: &str = NodeKind::from(self).into();
+            let name: &str = ExprKind::from(self).into();
             &name[..1]
         }
     }
 
     pub(crate) fn apply_replacement(
         &mut self,
-        func: &mut impl for<'a> FnMut(&Node<'a>) -> Option<Node<'a>>,
+        func: &mut impl for<'a> FnMut(&Expr<'a>) -> Option<Expr<'a>>,
         //has_modifed: &mut bool,
     ) {
         match self {
-            Node::Rule {
+            Expr::Rule {
                 span,
                 rule: Rule { body, .. },
             }
-            | Node::Choice { span, body }
-            | Node::Optional { span, body }
-            | Node::Repeated { span, body, .. }
-            | Node::Group { span, body } => {
+            | Expr::Choice { span, body }
+            | Expr::Optional { span, body }
+            | Expr::Repetition { span, body, .. }
+            | Expr::Group { span, body } => {
                 for n in body.iter_mut() {
                     if let Some(new) = func(n) {
                         *n = new;
@@ -91,10 +91,10 @@ impl Node<'_> {
                 *span = Span::union(body.iter());
             }
 
-            Node::Regex { .. }
-            | Node::UnparsedOperator { .. }
-            | Node::Terminal { .. }
-            | Node::Nonterminal { .. } => { /* no children, do nothing */ }
+            Expr::Regex { .. }
+            | Expr::UnparsedOperator { .. }
+            | Expr::Literal { .. }
+            | Expr::Nonterminal { .. } => { /* no children, do nothing */ }
         }
         let res = func(self);
         if let Some(res) = res {
@@ -105,7 +105,7 @@ impl Node<'_> {
 
 fn write_slice(
     f: &mut std::fmt::Formatter<'_>,
-    slice: &[Node<'_>],
+    slice: &[Expr<'_>],
     sep: &'static str,
 ) -> std::fmt::Result {
     write!(f, "(")?;
@@ -118,13 +118,13 @@ fn write_slice(
     write!(f, ")")
 }
 
-impl Display for Node<'_> {
+impl Display for Expr<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Node::Nonterminal { name: str, .. } => write!(f, "{str}")?,
-            Node::Terminal { str, .. } => write!(f, "\"{str}\"")?,
+            Expr::Nonterminal { name: str, .. } => write!(f, "{str}")?,
+            Expr::Literal { str, .. } => write!(f, "\"{str}\"")?,
 
-            Node::Repeated {
+            Expr::Repetition {
                 body, one_needed, ..
             } => {
                 if *one_needed {
@@ -137,19 +137,19 @@ impl Display for Node<'_> {
                     write!(f, ")*")?;
                 }
             }
-            Node::Optional { body, .. } => {
+            Expr::Optional { body, .. } => {
                 write!(f, "[")?;
                 write_slice(f, body, " ")?;
                 write!(f, "]")?;
             }
 
-            Node::Regex { pattern, .. } => write!(f, "#'{pattern}'")?,
-            Node::Group { body, .. } => write_slice(f, body, " ")?,
-            Node::Choice { body, .. } => {
+            Expr::Regex { pattern, .. } => write!(f, "#'{pattern}'")?,
+            Expr::Group { body, .. } => write_slice(f, body, " ")?,
+            Expr::Choice { body, .. } => {
                 write_slice(f, body, "|")?;
             }
-            Node::UnparsedOperator { op, .. } => write!(f, "{}", op.get_str("string").unwrap())?,
-            Node::Rule {
+            Expr::UnparsedOperator { op, .. } => write!(f, "{}", op.get_str("string").unwrap())?,
+            Expr::Rule {
                 rule: Rule { name, body },
                 ..
             } => {
@@ -239,20 +239,20 @@ mod test {
         output
     };
 
-    fn node_strategy() -> impl Strategy<Value = Node<'static>> {
+    fn node_strategy() -> impl Strategy<Value = Expr<'static>> {
         let leaf = (0..NAMES.len() * 3).prop_map(|n| {
             let typ = n % 3;
             let n = n / 3;
             match typ {
-                0 => Node::Nonterminal {
+                0 => Expr::Nonterminal {
                     span: DUMMY_SPAN,
                     name: NAMES[n],
                 },
-                1 => Node::Terminal {
+                1 => Expr::Literal {
                     span: DUMMY_SPAN,
                     str: NAMES[n],
                 },
-                2 => Node::Regex {
+                2 => Expr::Regex {
                     span: DUMMY_SPAN,
                     pattern: NAMES[n],
                 },
@@ -262,22 +262,22 @@ mod test {
 
         leaf.prop_recursive(2, 10, 2, |inner| {
             prop_oneof![
-                prop::collection::vec(inner.clone(), 2).prop_map(|body| Node::Choice {
+                prop::collection::vec(inner.clone(), 2).prop_map(|body| Expr::Choice {
                     span: DUMMY_SPAN,
                     body
                 }),
-                prop::collection::vec(inner.clone(), 2).prop_map(|body| Node::Optional {
+                prop::collection::vec(inner.clone(), 2).prop_map(|body| Expr::Optional {
                     span: DUMMY_SPAN,
                     body
                 }),
                 (prop::collection::vec(inner.clone(), 2), any::<bool>()).prop_map(
-                    |(body, one_needed)| Node::Repeated {
+                    |(body, one_needed)| Expr::Repetition {
                         span: DUMMY_SPAN,
                         body,
                         one_needed,
                     }
                 ),
-                prop::collection::vec(inner.clone(), 2).prop_map(|body| Node::Group {
+                prop::collection::vec(inner.clone(), 2).prop_map(|body| Expr::Group {
                     span: DUMMY_SPAN,
                     body
                 }),

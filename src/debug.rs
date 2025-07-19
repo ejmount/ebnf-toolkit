@@ -1,27 +1,24 @@
-#![warn(warnings)]
+use crate::{Expr, Rule, expr::ExprKind};
+use display_tree::{AsTree, DisplayTree, Style};
 use std::{
     fmt::{Formatter, Write},
     iter::once,
 };
 
-use display_tree::{AsTree, DisplayTree, Style};
-
-use crate::{Node, Rule, nodes::NodeKind};
-
 const EMPTY_STRING: &str = "";
 
-impl DisplayTree for Node<'_> {
+impl DisplayTree for Expr<'_> {
     fn fmt(&self, f: &mut Formatter, style: Style) -> std::fmt::Result {
         let indentation = style.indentation as usize - 1;
         let horizontal_bar = format!("{:indentation$}", style.char_set.horizontal);
 
-        if NodeKind::from(self) != NodeKind::Rule {
-            let name: &str = NodeKind::from(self).into();
+        if ExprKind::from(self) != ExprKind::Rule {
+            let name: &str = ExprKind::from(self).into();
             writeln!(f, "{} {}", style.leaf_style.apply(name), self.span())?;
         }
 
         match self {
-            Node::Terminal { str, .. } => write!(
+            Expr::Literal { str, .. } => write!(
                 f,
                 "{}",
                 style.branch_style.apply(&format!(
@@ -30,7 +27,7 @@ impl DisplayTree for Node<'_> {
                     str.escape_debug()
                 ))
             )?,
-            Node::Regex { pattern: s, .. } | Node::Nonterminal { name: s, .. } => write!(
+            Expr::Regex { pattern: s, .. } | Expr::Nonterminal { name: s, .. } => write!(
                 f,
                 "{}",
                 style.branch_style.apply(&format!(
@@ -38,7 +35,7 @@ impl DisplayTree for Node<'_> {
                     style.char_set.end_connector, s
                 ))
             )?,
-            Node::UnparsedOperator { op, .. } => {
+            Expr::UnparsedOperator { op, .. } => {
                 let op: &str = op.into();
                 write!(
                     f,
@@ -50,13 +47,13 @@ impl DisplayTree for Node<'_> {
                 )?;
             }
 
-            Node::Choice { body, .. }
-            | Node::Optional { body, .. }
-            | Node::Repeated { body, .. }
-            | Node::Group { body, .. } => {
+            Expr::Choice { body, .. }
+            | Expr::Optional { body, .. }
+            | Expr::Repetition { body, .. }
+            | Expr::Group { body, .. } => {
                 print_vec_tree(f, style, body)?;
             }
-            Node::Rule { rule, .. } => write!(f, "{}", AsTree::new(rule))?,
+            Expr::Rule { rule, .. } => write!(f, "{}", AsTree::new(rule))?,
         }
         Ok(())
     }
@@ -65,7 +62,7 @@ impl DisplayTree for Node<'_> {
 pub(crate) fn print_vec_tree(
     f: &mut impl Write,
     style: Style,
-    body: &[Node<'_>],
+    body: &[Expr<'_>],
 ) -> Result<(), std::fmt::Error> {
     let indentation = style.indentation as usize - 1;
     let spacer = format!(" {EMPTY_STRING:indentation$}");
@@ -95,7 +92,6 @@ impl DisplayTree for Rule<'_> {
             "{1}{horizontal_bar}name: {0}",
             &self.name, style.char_set.connector
         )?;
-        //let vec_output = fmt_vec(&self.body, style);
 
         print_vec_tree(f, style, &self.body)?;
         Ok(())
@@ -136,37 +132,37 @@ pub(crate) fn fmt_vec<T: DisplayTree>(v: &[T], style: Style) -> impl Iterator<It
 mod test {
 
     use super::*;
-    use crate::{nodes::Operator, token_data::DUMMY_SPAN};
+    use crate::{expr::Operator, token_data::DUMMY_SPAN};
     #[test]
     fn one_level_test() {
         let span = DUMMY_SPAN;
 
         let body = vec![
-            Node::Nonterminal {
+            Expr::Nonterminal {
                 span,
                 name: "Nonterm",
             },
-            Node::Terminal { span, str: "Term" },
-            Node::UnparsedOperator {
+            Expr::Literal { span, str: "Term" },
+            Expr::UnparsedOperator {
                 span,
                 op: Operator::Equals,
             },
-            Node::Choice {
+            Expr::Choice {
                 span,
                 body: vec![
-                    Node::Optional {
+                    Expr::Optional {
                         span,
-                        body: vec![Node::Regex { span, pattern: "." }],
+                        body: vec![Expr::Regex { span, pattern: "." }],
                     },
-                    Node::Repeated {
+                    Expr::Repetition {
                         span,
-                        body: vec![Node::Regex { span, pattern: "a" }],
+                        body: vec![Expr::Regex { span, pattern: "a" }],
                         one_needed: true,
                     },
                 ],
             },
         ];
-        let n = Node::Rule {
+        let n = Expr::Rule {
             span,
             rule: Rule { name: "name", body },
         };
@@ -177,7 +173,7 @@ mod test {
         ├─name: name
         └─0: Nonterminal [4294967294:0..4294967294:2]
           │  └─ Nonterm
-          1: Terminal [4294967294:0..4294967294:2]
+          1: Literal [4294967294:0..4294967294:2]
           │  └─ 'Term'
           2: UnparsedOperator [4294967294:0..4294967294:2]
           │  └─ Equals
@@ -185,7 +181,7 @@ mod test {
              └─0: Optional [4294967294:0..4294967294:2]
                │  └─0: Regex [4294967294:0..4294967294:2]
                │       └─ .
-               1: Repeated [4294967294:0..4294967294:2]
+               1: Repetition [4294967294:0..4294967294:2]
                   └─0: Regex [4294967294:0..4294967294:2]
                        └─ a
         ");
@@ -197,13 +193,13 @@ mod test {
         let strings: Vec<_> = (0..12).map(|n| format!("nonterm_{n}")).collect();
 
         let body: Vec<_> = (0..12)
-            .map(|n| Node::Nonterminal {
+            .map(|n| Expr::Nonterminal {
                 span,
                 name: &strings[n],
             })
             .collect();
 
-        let root = Node::Group { span, body };
+        let root = Expr::Group { span, body };
         let tree = AsTree::new(&root);
 
         insta::assert_snapshot!(tree, @r"

@@ -2,4 +2,4 @@
 source: tests/irc.rs
 expression: "rules.get(\"SPACE\").unwrap()"
 ---
-Rule { name: "SPACE", body: [Repeated { span: Span { start: 891, end: 894, line_offset_start: (21, 20), line_offset_end: (21, 23) }, body: [Terminal { span: Span { start: 891, end: 894, line_offset_start: (21, 20), line_offset_end: (21, 23) }, str: " " }], one_needed: true }] }
+Rule { name: "SPACE", body: [Repetition { span: Span { start: 891, end: 894, line_offset_start: (21, 20), line_offset_end: (21, 23) }, body: [Literal { span: Span { start: 891, end: 894, line_offset_start: (21, 20), line_offset_end: (21, 23) }, str: " " }], one_needed: true }] }

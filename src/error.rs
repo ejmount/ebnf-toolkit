@@ -1,11 +1,12 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::Range};
 
+use ariadne::{ColorGenerator, Label};
 use display_tree::Style;
 
 use crate::{
-    Node,
+    Expr,
     debug::print_vec_tree,
-    nodes::{NodeKind, Operator},
+    expr::{ExprKind, Operator},
     parser::LrStack,
 };
 
@@ -67,9 +68,9 @@ impl Eq for EbnfError<'_> {}
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum FailureReason<'a> {
-    TerminatorNotEndingRule(Vec<Node<'a>>),
-    InvalidRuleStart(Node<'a>),
-    ExhaustedInput(Vec<Node<'a>>),
+    TerminatorNotEndingRule(Vec<Expr<'a>>),
+    InvalidRuleStart(Expr<'a>),
+    ExhaustedInput(Vec<Expr<'a>>),
 }
 
 impl EbnfError<'_> {
@@ -99,15 +100,14 @@ impl Display for EbnfError<'_> {
 
         let s = Source::from(input);
 
-        let mut colors = ColorGenerator::new();
-
-        let col = colors.next();
-
         let mut report = Report::build(ReportKind::Error, ("<input>", 0..input.len()));
 
         #[allow(clippy::range_plus_one)]
         match self {
             &EbnfError::LexError { offset, .. } => {
+                let mut colors = ColorGenerator::new();
+
+                let col = colors.next();
                 report = report.with_message("Tokenization error").with_label(
                     Label::new(("<input>", offset..1 + offset))
                         .with_message("This was not recognised as the start of a valid token")
@@ -126,61 +126,7 @@ impl Display for EbnfError<'_> {
                 end,
                 reason,
             } => {
-                match reason.as_ref().unwrap() {
-                    FailureReason::ExhaustedInput(nodes) => {
-                        report = report.with_message(format!(
-                            "Parse error: Unexpected end of input at index {start}",
-                        ));
-                        report = print_stack(report, nodes);
-                    }
-
-                    FailureReason::InvalidRuleStart(incorrect_node) => {
-                        let found_msg = match NodeKind::from(incorrect_node) {
-                            NodeKind::Terminal => "string literal",
-                            NodeKind::Regex => "regular expression",
-                            NodeKind::UnparsedOperator => "operator",
-                            NodeKind::Group => "list of terms", // unreachable?
-                            NodeKind::Choice => "alternatives",
-                            NodeKind::Repeated => "repetition",
-                            NodeKind::Optional => "optional",
-                            NodeKind::Rule | NodeKind::Nonterminal => unreachable!(),
-                        };
-                        report = report.with_label(    Label::new(("<input>", *start..end.unwrap_or(start + 1)))
-                                .with_message(format!("Tried to start parsing a rule here; expected single non-terminal, found {found_msg}"))
-                                .with_color(col),
-                        );
-                    }
-                    FailureReason::TerminatorNotEndingRule(nodes) => {
-                        for n in nodes {
-                            if let Node::UnparsedOperator { span, op } = n {
-                                if *op != Operator::Equals && *op != Operator::Terminator {
-                                    let message = match *op {
-                                        Operator::OpenedGroup | Operator::OpenedSquare => {
-                                            "Possible unclosed bracket"
-                                        }
-                                        Operator::Kleene
-                                        | Operator::Optional
-                                        | Operator::Repeat => "Could not apply to preceding term",
-                                        _ => "Operator not understood",
-                                    };
-                                    report = report.with_label(
-                                        Label::new(("<input>", span.start()..span.end()))
-                                            .with_color(colors.next())
-                                            .with_message(message),
-                                    );
-                                }
-                            }
-                        }
-                        report = report.with_label(
-                            Label::new(("<input>", *start..end.unwrap_or(start + 1)))
-                                .with_message(
-                                    "Rule ending here did not parse successfully".to_string(),
-                                )
-                                .with_color(col),
-                        );
-                        report = print_stack(report, nodes);
-                    }
-                }
+                report = handle_parse_error(report, *start, *end, reason.as_ref());
             }
         }
 
@@ -195,10 +141,104 @@ impl Display for EbnfError<'_> {
     }
 }
 
-fn print_stack<'a>(
-    report: ariadne::ReportBuilder<'a, (&'static str, std::ops::Range<usize>)>,
-    nodes: &[Node<'_>],
-) -> ariadne::ReportBuilder<'a, (&'static str, std::ops::Range<usize>)> {
+fn handle_parse_error<'a>(
+    mut report: ariadne::ReportBuilder<'a, (&'static str, Range<usize>)>,
+    start: usize,
+    end: Option<usize>,
+    reason: Option<&FailureReason<'_>>,
+) -> ariadne::ReportBuilder<'a, (&'static str, Range<usize>)> {
+    let mut colors = ColorGenerator::new();
+
+    let col = colors.next();
+    match reason.as_ref().unwrap() {
+        FailureReason::ExhaustedInput(nodes) => {
+            report = report.with_message(format!(
+                "Parse error: Unexpected end of input at index {start}",
+            ));
+            attach_stack_to_report(report, nodes)
+        }
+
+        FailureReason::InvalidRuleStart(incorrect_node) => {
+            let found_msg = match ExprKind::from(incorrect_node) {
+                ExprKind::Literal => "string literal",
+                ExprKind::Regex => "regular expression",
+                ExprKind::UnparsedOperator => "operator",
+                ExprKind::Group => "list of terms", // unreachable?
+                ExprKind::Choice => "alternatives",
+                ExprKind::Repetition => "repetition",
+                ExprKind::Optional => "optional",
+                ExprKind::Rule | ExprKind::Nonterminal => unreachable!(),
+            };
+            report.with_label(    Label::new(("<input>", start..end.unwrap_or(start + 1)))
+                    .with_message(format!("Tried to start parsing a rule here; expected single non-terminal, found {found_msg}"))
+                    .with_color(col),
+            )
+        }
+        FailureReason::TerminatorNotEndingRule(nodes) => {
+            for n in nodes {
+                if let Expr::UnparsedOperator { span, op } = n {
+                    if *op != Operator::Equals && *op != Operator::Terminator {
+                        let message = match *op {
+                            Operator::OpenedGroup | Operator::OpenedSquare => {
+                                "Possible unclosed bracket"
+                            }
+                            Operator::Kleene | Operator::Optional | Operator::Repeat => {
+                                "Could not apply to preceding term"
+                            }
+                            _ => "Operator not understood",
+                        };
+                        report = report.with_label(
+                            Label::new(("<input>", span.start()..span.end()))
+                                .with_color(colors.next())
+                                .with_message(message),
+                        );
+                    }
+                }
+            }
+            // dbg!(nodes.iter().position(|n| {
+            //     matches!(
+            //         n,
+            //         Expr::UnparsedOperator {
+            //             op: Operator::Equals,
+            //             ..
+            //         }
+            //     )
+            // }));
+            if let Some(equals) = nodes.iter().position(|n| {
+                matches!(
+                    n,
+                    Expr::UnparsedOperator {
+                        op: Operator::Equals,
+                        ..
+                    }
+                )
+            }) && let Some(not_identifier) = nodes.get(equals - 1)
+                && ExprKind::from(not_identifier) != ExprKind::Nonterminal
+            {
+                let Range { start, end } = not_identifier.span().range();
+                report = report.with_label(
+                    Label::new(("<input>", start..end))
+                        .with_message(format!(
+                            "Expected identifier, found {:?}",
+                            ExprKind::from(not_identifier)
+                        ))
+                        .with_color(colors.next()),
+                );
+            }
+            report = report.with_label(
+                Label::new(("<input>", start..end.unwrap_or(start + 1)))
+                    .with_message("Rule ending here did not parse successfully".to_string())
+                    .with_color(col),
+            );
+            attach_stack_to_report(report, nodes)
+        }
+    }
+}
+
+fn attach_stack_to_report<'a>(
+    report: ariadne::ReportBuilder<'a, (&'static str, Range<usize>)>,
+    nodes: &[Expr<'_>],
+) -> ariadne::ReportBuilder<'a, (&'static str, Range<usize>)> {
     let mut nodes: Vec<_> = nodes.to_vec();
     nodes.reverse();
     let mut tree_output = String::new();

@@ -2,4 +2,4 @@
 source: tests/irc.rs
 expression: "rules.get(\"client_prefix\").unwrap()"
 ---
-Rule { name: "client_prefix", body: [Terminal { span: Span { start: 400, end: 403, line_offset_start: (10, 18), line_offset_end: (10, 21) }, str: "+" }] }
+Rule { name: "client_prefix", body: [Literal { span: Span { start: 400, end: 403, line_offset_start: (10, 18), line_offset_end: (10, 21) }, str: "+" }] }

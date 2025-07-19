@@ -2,4 +2,4 @@
 source: tests/irc.rs
 expression: "rules.get(\"tag\").unwrap()"
 ---
-Rule { name: "tag", body: [Nonterminal { span: Span { start: 135, end: 138, line_offset_start: (4, 18), line_offset_end: (4, 21) }, name: "key" }, Optional { span: Span { start: 140, end: 157, line_offset_start: (4, 23), line_offset_end: (4, 40) }, body: [Terminal { span: Span { start: 140, end: 143, line_offset_start: (4, 23), line_offset_end: (4, 26) }, str: "=" }, Nonterminal { span: Span { start: 144, end: 157, line_offset_start: (4, 27), line_offset_end: (4, 40) }, name: "escaped_value" }] }] }
+Rule { name: "tag", body: [Nonterminal { span: Span { start: 135, end: 138, line_offset_start: (4, 18), line_offset_end: (4, 21) }, name: "key" }, Optional { span: Span { start: 140, end: 157, line_offset_start: (4, 23), line_offset_end: (4, 40) }, body: [Literal { span: Span { start: 140, end: 143, line_offset_start: (4, 23), line_offset_end: (4, 26) }, str: "=" }, Nonterminal { span: Span { start: 144, end: 157, line_offset_start: (4, 27), line_offset_end: (4, 40) }, name: "escaped_value" }] }] }

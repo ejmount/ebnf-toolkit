@@ -1,11 +1,11 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::{Node, error::EbnfError, parse_rules_from_tokens, token_data::tokenize};
+use crate::{Expr, error::EbnfError, parse_rules_from_tokens, token_data::tokenize};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rule<'a> {
     pub name: &'a str,
-    pub body: Vec<Node<'a>>,
+    pub body: Vec<Expr<'a>>,
 }
 
 impl<'a> Rule<'a> {
@@ -21,17 +21,17 @@ impl<'a> Rule<'a> {
 
     pub fn nonterminals(&self) -> Vec<&'a str> {
         #[allow(clippy::enum_glob_use)]
-        use Node::*;
+        use Expr::*;
         let mut stack: VecDeque<_> = self.body.iter().collect();
         let mut nonterm_names = vec![];
 
         while let Some(node) = stack.pop_front() {
             match node {
-                Regex { .. } | Terminal { .. } | UnparsedOperator { .. } => {}
+                Regex { .. } | Literal { .. } | UnparsedOperator { .. } => {}
                 Nonterminal { name, .. } => nonterm_names.push(*name),
                 Choice { body, .. }
                 | Optional { body, .. }
-                | Repeated { body, .. }
+                | Repetition { body, .. }
                 | Group { body, .. } => stack.extend(body),
 
                 Rule { .. } => unreachable!(),
@@ -81,20 +81,20 @@ impl<'a> FromIterator<Rule<'a>> for Grammar<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{Grammar, Node, Rule, token_data::DUMMY_SPAN};
+    use crate::{Expr, Grammar, Rule, token_data::DUMMY_SPAN};
 
     #[test]
     fn nonterminals() {
         let span = DUMMY_SPAN;
         let body = vec![
-            Node::Group {
+            Expr::Group {
                 span,
                 body: vec![
-                    Node::Nonterminal { span, name: "A" },
-                    Node::Nonterminal { span, name: "B" },
+                    Expr::Nonterminal { span, name: "A" },
+                    Expr::Nonterminal { span, name: "B" },
                 ],
             },
-            Node::Nonterminal { span, name: "C" },
+            Expr::Nonterminal { span, name: "C" },
         ];
 
         let nonterms = Rule { body, name: "" }.nonterminals();

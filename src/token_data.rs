@@ -6,7 +6,7 @@ use std::{
 use logos::{Lexer, Logos, Skip};
 use strum::{Display, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantArray};
 
-use crate::{Node, error::EbnfError};
+use crate::{Expr, error::EbnfError};
 
 // Sentinel for testing
 // Compares equal to any other Span so literal objects don't have to synthesize one
@@ -39,8 +39,8 @@ impl Span {
         self.start..self.end
     }
 
-    pub(crate) fn union<'a>(iter: impl Iterator<Item = &'a Node<'a>>) -> Span {
-        iter.map(Node::span)
+    pub(crate) fn union<'a>(iter: impl Iterator<Item = &'a Expr<'a>>) -> Span {
+        iter.map(Expr::span)
             .reduce(|s, t| {
                 let min = if s.start < t.start { s } else { t };
                 let max = if s.end > t.end { s } else { t };
