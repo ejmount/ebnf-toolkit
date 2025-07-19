@@ -34,17 +34,26 @@ impl Span {
     pub fn end(&self) -> usize {
         self.end
     }
+    pub fn range(&self) -> Range<usize> {
+        self.start..self.end
+    }
 
-    pub(crate) fn union(s: Span, t: Span) -> Span {
-        let min = if s.start < t.start { s } else { t };
-        let max = if s.end > t.end { s } else { t };
+    pub(crate) fn union<'a>(iter: impl Iterator<Item = &'a Node<'a>>) -> Span {
+        iter.map(Node::span)
+            .reduce(|s, t| {
+                let min = if s.start < t.start { s } else { t };
+                let max = if s.end > t.end { s } else { t };
 
-        Span {
-            start: min.start,
-            end: max.end,
-            line_offset_start: min.line_offset_start,
-            line_offset_end: max.line_offset_end,
-        }
+                Span {
+                    start: min.start,
+                    end: max.end,
+                    line_offset_start: min.line_offset_start,
+                    line_offset_end: max.line_offset_end,
+                }
+            })
+            .expect("Asked for span of empty list")
+    }
+}
     }
 }
 

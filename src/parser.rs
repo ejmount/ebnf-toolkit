@@ -50,7 +50,7 @@ mod rules {
 
     fn filter_parsed<'a>(nodes: &[Node<'a>]) -> (Vec<Node<'a>>, Span, usize) {
         let size = nodes.len();
-        let span = nodes.iter().map(Node::span).reduce(Span::union).unwrap();
+        let span = Span::union(nodes.iter());
         let new_nodes: Vec<Node<'_>> = nodes
             .iter()
             .filter(|n| NodeKind::UnparsedOperator != NodeKind::from(*n))
@@ -104,7 +104,7 @@ mod rules {
 
     pub(super) fn rule<'a>(nodes: &[Node<'a>]) -> (Node<'a>, usize) {
         let size = nodes.len();
-        let span = nodes.iter().map(Node::span).reduce(Span::union).unwrap();
+        let span = Span::union(nodes.iter());
 
         let [Node::Nonterminal { name, .. }, _equals, body @ .., _term] = nodes else {
             unreachable!("Bug: Rule with a name of {:?}", nodes.first())

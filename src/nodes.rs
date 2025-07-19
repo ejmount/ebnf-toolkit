@@ -94,7 +94,7 @@ impl Node<'_> {
                     }
                     n.apply_replacement(func);
                 }
-                *span = body.iter().map(Node::span).reduce(Span::union).unwrap();
+                *span = Span::union(body.iter());
             }
 
             Node::Regex { .. }

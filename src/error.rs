@@ -129,7 +129,7 @@ impl Display for EbnfError<'_> {
                 match reason.as_ref().unwrap() {
                     FailureReason::ExhaustedInput(nodes) => {
                         report = report.with_message(format!(
-                            "Parse error: Unexpected end of input at {start}-{end:?}"
+                            "Parse error: Unexpected end of input at index {start}",
                         ));
                         report = print_stack(report, nodes);
                     }

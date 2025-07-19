@@ -25,7 +25,7 @@ pub use token_data::Span;
 
 use crate::{
     parser::LrStack,
-    simplification::tidy_up_rule,
+    simplification::simplify_node,
     token_data::{Token, TokenPayload},
 };
 
@@ -75,10 +75,12 @@ fn parse_rules_from_tokens<'a>(
         }
 
         if let Some(Node::Rule { .. }) = stack.peek_node() {
-            let Node::Rule { rule, .. } = stack.pop_node().unwrap() else {
+            let mut rule_node = stack.pop_node().unwrap();
+            simplify_node(&mut rule_node);
+            let Node::Rule { rule, .. } = rule_node else {
                 unreachable!()
             };
-            outputs.push(tidy_up_rule(rule));
+            outputs.push(rule);
         }
 
         if let Some(new_token) = input_tokens.split_off_first() {
@@ -115,8 +117,14 @@ mod tests {
 
         let parse = Rule::new(src).unwrap_or_else(|e| panic!("{e}"));
 
-        //let tree = format_tree!(parse);
-        insta::assert_compact_debug_snapshot!(parse, @r#"Rule { name: "message", body: [Optional { span: Span { start: 18, end: 34, line_offset_start: (1, 18), line_offset_end: (1, 34) }, body: [Terminal { span: Span { start: 19, end: 22, line_offset_start: (1, 19), line_offset_end: (1, 22) }, str: "@" }, Nonterminal { span: Span { start: 23, end: 27, line_offset_start: (1, 23), line_offset_end: (1, 27) }, name: "tags" }, Nonterminal { span: Span { start: 28, end: 33, line_offset_start: (1, 28), line_offset_end: (1, 33) }, name: "SPACE" }] }, Optional { span: Span { start: 35, end: 54, line_offset_start: (1, 35), line_offset_end: (1, 54) }, body: [Terminal { span: Span { start: 36, end: 39, line_offset_start: (1, 36), line_offset_end: (1, 39) }, str: ":" }, Nonterminal { span: Span { start: 40, end: 46, line_offset_start: (1, 40), line_offset_end: (1, 46) }, name: "source" }, Nonterminal { span: Span { start: 47, end: 52, line_offset_start: (1, 47), line_offset_end: (1, 52) }, name: "SPACE" }] }, Nonterminal { span: Span { start: 55, end: 62, line_offset_start: (1, 55), line_offset_end: (1, 62) }, name: "command" }, Optional { span: Span { start: 63, end: 75, line_offset_start: (1, 63), line_offset_end: (1, 75) }, body: [Nonterminal { span: Span { start: 64, end: 74, line_offset_start: (1, 64), line_offset_end: (1, 74) }, name: "parameters" }] }, Nonterminal { span: Span { start: 76, end: 80, line_offset_start: (1, 76), line_offset_end: (1, 80) }, name: "crlf" }] }"#);
+    #[test]
+    fn basic_span_check() {
+        let src = "message       ::= hello;";
+
+        let parse = Rule::new(src).unwrap_or_else(|e| panic!("{e}"));
+        let node = parse.body.first().unwrap();
+        let s = node.span();
+        assert_eq!(&src[s.range()], "hello");
     }
 
     #[test]
