@@ -4,12 +4,13 @@ use std::{
 };
 
 use logos::{Lexer, Logos, Skip};
-use proptest_derive::Arbitrary;
 use strum::{Display, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantArray};
 
-use crate::error::EbnfError;
+use crate::{Node, error::EbnfError};
 
-#[allow(unused)]
+// Sentinel for testing
+// Compares equal to any other Span so literal objects don't have to synthesize one
+#[cfg(test)]
 pub(crate) const DUMMY_SPAN: Span = Span {
     start: usize::MAX - 1,
     end: usize::MAX,
@@ -17,7 +18,7 @@ pub(crate) const DUMMY_SPAN: Span = Span {
     line_offset_end: (u32::MAX - 1, 2),
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Arbitrary)]
+#[derive(Debug, Clone, Copy, Eq, PartialOrd, Ord)]
 pub struct Span {
     start: usize,
     end: usize,
@@ -54,6 +55,17 @@ impl Span {
             .expect("Asked for span of empty list")
     }
 }
+
+impl PartialEq for Span {
+    fn eq(&self, other: &Self) -> bool {
+        #[cfg(test)]
+        if self.start == DUMMY_SPAN.start || other.start == DUMMY_SPAN.start {
+            return true;
+        }
+        self.start
+            .cmp(&other.start)
+            .then(self.end.cmp(&other.end))
+            .is_eq()
     }
 }
 

@@ -1,11 +1,5 @@
-use std::fmt::Display;
-
-use std::sync::atomic::AtomicUsize;
-
 use crate::{Rule, token_data::Span};
-use proptest::prelude::*;
-use proptest::prop_oneof;
-use proptest_derive::Arbitrary;
+use std::fmt::Display;
 use strum::{EnumDiscriminants, EnumProperty, IntoStaticStr, VariantNames};
 
 #[derive(Debug, Clone, PartialEq, Eq, EnumDiscriminants)]
@@ -109,97 +103,6 @@ impl Node<'_> {
     }
 }
 
-const NAMES: [&str; 128] = const {
-    const SPACING: usize = 4;
-    const DIGITS: [u8; 10] = [b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9'];
-    const TEMPLATE: &str = "nonterminalXXXX";
-
-    const BYTE_BLOCKS: [[u8; TEMPLATE.len()]; 128] = {
-        let mut orig = [[0; TEMPLATE.len()]; 128];
-        let mut i = 0;
-        while i < orig.len() {
-            let mut k = 0;
-            while k < TEMPLATE.len() {
-                if k < TEMPLATE.len() - SPACING {
-                    orig[i][k] = TEMPLATE.as_bytes()[k];
-                } else {
-                    let diff = k - (TEMPLATE.len() - SPACING);
-                    let pow = SPACING - diff - 1;
-                    let shift = i / (10usize.pow(pow as u32));
-
-                    orig[i][k] = DIGITS[shift % 10];
-                }
-                k += 1;
-            }
-            i += 1;
-        }
-        orig
-    };
-
-    let mut output = [""; 128];
-    let mut a = 0;
-    while a < output.len() {
-        output[a] = match str::from_utf8(&BYTE_BLOCKS[a]) {
-            Ok(s) => s,
-            Err(_) => panic!("Whoops"),
-        };
-        a += 1;
-    }
-
-    output
-};
-
-static NAME_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-// #[test]
-// fn print() {
-//     println!("{:?}", NAMES);
-// }
-
-fn node_strategy() -> impl Strategy<Value = Node<'static>> {
-    let leaf = prop_oneof![
-        any::<Span>().prop_map(|span| {
-            let c = NAME_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let c = c % NAMES.len();
-            Node::Nonterminal {
-                span,
-                name: NAMES[c],
-            }
-        }),
-        any::<Span>().prop_map(|span| Node::Terminal {
-            span,
-            str: "literal"
-        }),
-        any::<Span>().prop_map(|span| Node::Regex {
-            span,
-            pattern: "regex"
-        }),
-        // (any::<Span>(), any::<Operator>())
-        //     .prop_map(|(span, op)| Node::UnparsedOperator { span, op })
-    ];
-
-    leaf.prop_recursive(2, 10, 2, |inner| {
-        prop_oneof![
-            (any::<Span>(), prop::collection::vec(inner.clone(), 2))
-                .prop_map(|(span, body)| Node::Choice { span, body }),
-            (any::<Span>(), prop::collection::vec(inner.clone(), 2))
-                .prop_map(|(span, body)| Node::Optional { span, body }),
-            (
-                any::<Span>(),
-                prop::collection::vec(inner.clone(), 2),
-                any::<bool>()
-            )
-                .prop_map(|(span, body, one_needed)| Node::Repeated {
-                    span,
-                    body,
-                    one_needed,
-                }),
-            (any::<Span>(), prop::collection::vec(inner.clone(), 2))
-                .prop_map(|(span, body)| Node::Group { span, body }),
-        ]
-    })
-}
-
 fn write_slice(
     f: &mut std::fmt::Formatter<'_>,
     slice: &[Node<'_>],
@@ -261,7 +164,7 @@ impl Display for Node<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumProperty, IntoStaticStr, Arbitrary)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumProperty, IntoStaticStr)]
 pub enum Operator {
     #[strum(props(string = "("))]
     OpenedGroup,
@@ -276,7 +179,6 @@ pub enum Operator {
     #[strum(props(string = "}"))]
     ClosedBrace,
     #[strum(props(string = ";"))]
-    #[proptest(skip)]
     Terminator,
     #[strum(props(string = "="))]
     Equals,
@@ -293,6 +195,95 @@ pub enum Operator {
 #[cfg(test)]
 mod test {
     use crate::simplification::simplify_node;
+    use crate::token_data::DUMMY_SPAN;
+    use proptest::prelude::*;
+    use proptest::prop_oneof;
+
+    const NAMES: [&str; 128] = const {
+        const SPACING: usize = 4;
+        const DIGITS: [u8; 10] = [b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9'];
+        const TEMPLATE: &str = "stringXXXX";
+
+        const BYTE_BLOCKS: [[u8; TEMPLATE.len()]; 128] = {
+            let mut orig = [[0; TEMPLATE.len()]; 128];
+            let mut i = 0;
+            while i < orig.len() {
+                let mut k = 0;
+                while k < TEMPLATE.len() {
+                    if k < TEMPLATE.len() - SPACING {
+                        orig[i][k] = TEMPLATE.as_bytes()[k];
+                    } else {
+                        let diff = k - (TEMPLATE.len() - SPACING);
+                        let pow = SPACING - diff - 1;
+                        let shift = i / (10usize.pow(pow as u32));
+
+                        orig[i][k] = DIGITS[shift % 10];
+                    }
+                    k += 1;
+                }
+                i += 1;
+            }
+            orig
+        };
+
+        let mut output = [""; 128];
+        let mut a = 0;
+        while a < output.len() {
+            output[a] = match str::from_utf8(&BYTE_BLOCKS[a]) {
+                Ok(s) => s,
+                Err(_) => panic!("Whoops"),
+            };
+            a += 1;
+        }
+
+        output
+    };
+
+    fn node_strategy() -> impl Strategy<Value = Node<'static>> {
+        let leaf = (0..NAMES.len() * 3).prop_map(|n| {
+            let typ = n % 3;
+            let n = n / 3;
+            match typ {
+                0 => Node::Nonterminal {
+                    span: DUMMY_SPAN,
+                    name: NAMES[n],
+                },
+                1 => Node::Terminal {
+                    span: DUMMY_SPAN,
+                    str: NAMES[n],
+                },
+                2 => Node::Regex {
+                    span: DUMMY_SPAN,
+                    pattern: NAMES[n],
+                },
+                _ => unreachable!(),
+            }
+        });
+
+        leaf.prop_recursive(2, 10, 2, |inner| {
+            prop_oneof![
+                prop::collection::vec(inner.clone(), 2).prop_map(|body| Node::Choice {
+                    span: DUMMY_SPAN,
+                    body
+                }),
+                prop::collection::vec(inner.clone(), 2).prop_map(|body| Node::Optional {
+                    span: DUMMY_SPAN,
+                    body
+                }),
+                (prop::collection::vec(inner.clone(), 2), any::<bool>()).prop_map(
+                    |(body, one_needed)| Node::Repeated {
+                        span: DUMMY_SPAN,
+                        body,
+                        one_needed,
+                    }
+                ),
+                prop::collection::vec(inner.clone(), 2).prop_map(|body| Node::Group {
+                    span: DUMMY_SPAN,
+                    body
+                }),
+            ]
+        })
+    }
 
     use super::*;
     use display_tree::AsTree;

@@ -63,31 +63,36 @@ fn flatten_choices<'a>(n: &Node<'a>) -> Option<Node<'a>> {
     }
 }
 
-#[test]
-fn flatten_choice1() {
-    use Node::*;
-    let val = Choice {
-        span: DUMMY_SPAN,
-        body: vec![
-            Choice {
-                span: DUMMY_SPAN,
-                body: vec![
-                    Nonterminal {
-                        span: DUMMY_SPAN,
-                        name: "nonterminal0027",
-                    },
-                    Nonterminal {
-                        span: DUMMY_SPAN,
-                        name: "nonterminal0028",
-                    },
-                ],
-            },
-            Terminal {
-                span: DUMMY_SPAN,
-                str: "literal1",
-            },
-        ],
-    };
+#[cfg(test)]
+mod test {
+    use display_tree::AsTree;
+
+    use crate::{simplification::simplify_node, token_data::DUMMY_SPAN};
+    #[test]
+    fn flatten_choice1() {
+        use crate::Node::*;
+        let val = Choice {
+            span: DUMMY_SPAN,
+            body: vec![
+                Choice {
+                    span: DUMMY_SPAN,
+                    body: vec![
+                        Nonterminal {
+                            span: DUMMY_SPAN,
+                            name: "nonterminal0027",
+                        },
+                        Nonterminal {
+                            span: DUMMY_SPAN,
+                            name: "nonterminal0028",
+                        },
+                    ],
+                },
+                Terminal {
+                    span: DUMMY_SPAN,
+                    str: "literal1",
+                },
+            ],
+        };
 
     let mut simplified = val.clone();
     simplify_node(&mut simplified);
