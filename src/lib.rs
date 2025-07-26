@@ -8,6 +8,7 @@
 #![warn(unreachable_pub)]
 #![warn(unused_crate_dependencies)]
 #![warn(unused_qualifications)]
+#![warn(unused)]
 #![allow(clippy::must_use_candidate)]
 
 mod debug;
@@ -53,19 +54,18 @@ fn parse_rules_from_tokens<'a>(
 
         stack.reduce_until_shift_needed();
 
-        #[cfg(debug_assertions)]
         if Some(n) == end_of_rule_expected && !matches!(stack.peek_node(), Some(Expr::Rule { .. }))
         {
             let offset = stack.peek_node().unwrap().span().start();
-            return Err(EbnfError::from_parse_error(
-                input,
-                stack.clone(),
-                offset,
-                None,
-                Some(FailureReason::TerminatorNotEndingRule(
-                    stack.get(..).unwrap().to_vec(),
-                )),
-            ));
+            return Err({
+                EbnfError::ParseError {
+                    input,
+                    offset,
+                    reason: Some(FailureReason::TerminatorNotEndingRule(
+                        stack.into_parse_stack(),
+                    )),
+                }
+            });
         }
 
         if let Some(Expr::Rule { .. }) = stack.peek_node() {
@@ -87,14 +87,13 @@ fn parse_rules_from_tokens<'a>(
     if stack.get(..).unwrap().is_empty() {
         Ok(outputs)
     } else {
-        let reason = FailureReason::ExhaustedInput(stack.get(..).unwrap().to_vec());
-        Err(EbnfError::from_parse_error(
-            input,
-            stack,
-            input.len(),
-            None,
-            Some(reason),
-        ))
+        Err({
+            EbnfError::ParseError {
+                input,
+                offset: input.len(),
+                reason: Some(FailureReason::ExhaustedInput(stack.into_parse_stack())),
+            }
+        })
     }
 }
 

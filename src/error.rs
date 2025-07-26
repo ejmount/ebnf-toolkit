@@ -1,6 +1,8 @@
+#![allow(clippy::range_plus_one)]
+
 use std::{fmt::Display, ops::Range};
 
-use ariadne::{ColorGenerator, Label};
+use ariadne::{ColorGenerator, Label, ReportBuilder};
 use display_tree::Style;
 
 use crate::{
@@ -11,6 +13,8 @@ use crate::{
     token_data::{Token, TokenPayload},
 };
 
+type ReportType<'a> = ReportBuilder<'a, (&'static str, Range<usize>)>;
+
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum EbnfError<'a> {
@@ -20,8 +24,7 @@ pub enum EbnfError<'a> {
     },
     ParseError {
         input: &'a str,
-        start: usize,
-        end: Option<usize>,
+        offset: usize,
         /// This is a guess, it may be wrong.
         /// Its also unstable and errors in the same circumstances may produce different values for this field without notice
         reason: Option<FailureReason<'a>>,
@@ -38,7 +41,7 @@ impl EbnfError<'_> {
     }
     pub fn offset(&self) -> Option<usize> {
         match self {
-            EbnfError::LexError { offset, .. } | EbnfError::ParseError { start: offset, .. } => {
+            EbnfError::LexError { offset, .. } | EbnfError::ParseError { offset, .. } => {
                 Some(*offset)
             }
             _ => None,
@@ -73,23 +76,6 @@ pub enum FailureReason<'a> {
     ExhaustedInput(Vec<Expr<'a>>),
 }
 
-impl EbnfError<'_> {
-    pub(crate) fn from_parse_error<'a>(
-        input: &'a str,
-        _stack: LrStack,
-        start: usize,
-        end: Option<usize>,
-        reason: Option<FailureReason<'a>>,
-    ) -> EbnfError<'a> {
-        EbnfError::ParseError {
-            input,
-            start,
-            end,
-            reason,
-        }
-    }
-}
-
 impl Display for EbnfError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use ariadne::{ColorGenerator, Label, Report, ReportKind, Source};
@@ -102,14 +88,13 @@ impl Display for EbnfError<'_> {
 
         let mut report = Report::build(ReportKind::Error, ("<input>", 0..input.len()));
 
-        #[allow(clippy::range_plus_one)]
         match self {
             &EbnfError::LexError { offset, .. } => {
                 let mut colors = ColorGenerator::new();
 
                 let col = colors.next();
                 report = report.with_message("Tokenization error").with_label(
-                    Label::new(("<input>", offset..1 + offset))
+                    Label::new(("<input>", offset..offset + 1))
                         .with_message("This was not recognised as the start of a valid token")
                         .with_color(col),
                 );
@@ -122,11 +107,10 @@ impl Display for EbnfError<'_> {
             }
             EbnfError::ParseError {
                 input: _,
-                start,
-                end,
+                offset: start,
                 reason,
             } => {
-                report = handle_parse_error(report, *start, *end, reason.as_ref());
+                report = handle_parse_error(report, *start, reason.as_ref());
             }
         }
 
@@ -142,11 +126,10 @@ impl Display for EbnfError<'_> {
 }
 
 fn handle_parse_error<'a>(
-    mut report: ariadne::ReportBuilder<'a, (&'static str, Range<usize>)>,
-    start: usize,
-    end: Option<usize>,
+    mut report: ReportType<'a>,
+    offset: usize,
     reason: Option<&FailureReason<'_>>,
-) -> ariadne::ReportBuilder<'a, (&'static str, Range<usize>)> {
+) -> ReportType<'a> {
     let mut colors = ColorGenerator::new();
 
     let col = colors.next();
@@ -165,14 +148,14 @@ fn handle_parse_error<'a>(
 
             if let Some(Expr::Rule { .. }) = stack.pop_node() {
                 report = report.with_label(
-                    Label::new(("<input>", start..start))
+                    Label::new(("<input>", offset..offset))
                         .with_message("Missing semicolon here")
                         .with_color(colors.next()),
                 );
             } else {
                 report = report.with_label(
-                    Label::new(("<input>", start..start))
-                        .with_message(format!("Unexpected end of input at index {start}"))
+                    Label::new(("<input>", offset..offset))
+                        .with_message(format!("Unexpected end of input at index {offset}"))
                         .with_color(colors.next()),
                 );
             }
@@ -222,7 +205,7 @@ fn handle_parse_error<'a>(
                 );
             }
             report = report.with_label(
-                Label::new(("<input>", start..end.unwrap_or(start + 1)))
+                Label::new(("<input>", offset..(offset + 1)))
                     .with_message("Rule ending here did not parse successfully".to_string())
                     .with_color(col),
             );
@@ -231,11 +214,8 @@ fn handle_parse_error<'a>(
     }
 }
 
-fn attach_stack_to_report<'a>(
-    report: ariadne::ReportBuilder<'a, (&'static str, Range<usize>)>,
-    nodes: &[Expr<'_>],
-) -> ariadne::ReportBuilder<'a, (&'static str, Range<usize>)> {
-    let mut nodes: Vec<_> = nodes.to_vec();
+fn attach_stack_to_report<'a>(report: ReportType<'a>, nodes: &[Expr<'_>]) -> ReportType<'a> {
+    let mut nodes = nodes.to_vec();
     nodes.reverse();
     let mut tree_output = String::new();
     print_vec_tree(&mut tree_output, Style::default(), &nodes).unwrap();

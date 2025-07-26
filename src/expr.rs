@@ -61,7 +61,7 @@ impl Expr<'_> {
 
     pub(crate) fn node_pattern_code(&self) -> &'static str {
         if let Expr::UnparsedOperator { op, .. } = self {
-            op.get_str("string").unwrap()
+            op.get_str("repr").unwrap()
         } else {
             let name: &str = ExprKind::from(self).into();
             &name[..1]
@@ -71,7 +71,6 @@ impl Expr<'_> {
     pub(crate) fn apply_replacement(
         &mut self,
         func: &mut impl for<'a> FnMut(&Expr<'a>) -> Option<Expr<'a>>,
-        //has_modifed: &mut bool,
     ) {
         match self {
             Expr::Rule {
@@ -148,7 +147,7 @@ impl Display for Expr<'_> {
             Expr::Choice { body, .. } => {
                 write_slice(f, body, "|")?;
             }
-            Expr::UnparsedOperator { op, .. } => write!(f, "{}", op.get_str("string").unwrap())?,
+            Expr::UnparsedOperator { op, .. } => write!(f, "{}", op.get_str("repr").unwrap())?,
             Expr::Rule {
                 rule: Rule { name, body },
                 ..
@@ -166,29 +165,29 @@ impl Display for Expr<'_> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumProperty, IntoStaticStr)]
 pub enum Operator {
-    #[strum(props(string = "("))]
+    #[strum(props(repr = "("))]
     OpenedGroup,
-    #[strum(props(string = ")"))]
+    #[strum(props(repr = ")"))]
     ClosedGroup,
-    #[strum(props(string = "["))]
+    #[strum(props(repr = "["))]
     OpenedSquare,
-    #[strum(props(string = "]"))]
+    #[strum(props(repr = "]"))]
     ClosedSquare,
-    #[strum(props(string = "{"))]
+    #[strum(props(repr = "{"))]
     OpenedBrace,
-    #[strum(props(string = "}"))]
+    #[strum(props(repr = "}"))]
     ClosedBrace,
-    #[strum(props(string = ";"))]
+    #[strum(props(repr = ";"))]
     Terminator,
-    #[strum(props(string = "="))]
+    #[strum(props(repr = "="))]
     Equals,
-    #[strum(props(string = "|"))]
+    #[strum(props(repr = "|"))]
     Alternation,
-    #[strum(props(string = "*"))]
+    #[strum(props(repr = "*"))]
     Kleene,
-    #[strum(props(string = "?"))]
+    #[strum(props(repr = "?"))]
     Optional,
-    #[strum(props(string = "+"))]
+    #[strum(props(repr = "+"))]
     Repeat,
 }
 

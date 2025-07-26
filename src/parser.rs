@@ -1,4 +1,4 @@
-use std::{ops::Range, slice::SliceIndex, str::FromStr, sync::LazyLock};
+use std::{ops::Range, slice::SliceIndex, sync::LazyLock};
 
 use regex::{Match, Regex};
 use strum::VariantNames;
@@ -121,72 +121,70 @@ mod rules {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct LrStack<'a> {
-    bracket_stack: Vec<(usize, Token<'a>)>,
-    token_stack: Vec<Expr<'a>>,
-    token_pattern: String,
+    parse_stack: Vec<Expr<'a>>,
+    kind_pattern: String,
 }
 
 impl<'a> LrStack<'a> {
     pub(crate) fn new() -> LrStack<'a> {
-        LrStack {
-            bracket_stack: Vec::new(),
-            token_stack: Vec::new(),
-            token_pattern: String::from_str("").unwrap(),
-        }
+        Self::default()
     }
 
     pub(crate) fn get<I: SliceIndex<[Expr<'a>]>>(
         &self,
         index: I,
     ) -> Option<&<I as SliceIndex<[Expr<'a>]>>::Output> {
-        self.token_stack.get(index)
+        self.parse_stack.get(index)
     }
 
     fn match_rule(&self, r: &Regex) -> Option<Range<usize>> {
-        r.find(&self.token_pattern).as_ref().map(Match::range)
+        r.find(&self.kind_pattern).as_ref().map(Match::range)
     }
 
     pub(crate) fn push_token(&mut self, t: Token<'a>) {
         use Operator as Op;
-        #[allow(clippy::enum_glob_use)]
-        use TokenPayload::*;
+        use TokenPayload as Tp;
         let Token { payload, span } = t;
         let op_node = |op| Expr::UnparsedOperator { op, span };
         let node = match payload {
-            Alternation => op_node(Op::Alternation),
-            OpeningBrace => op_node(Op::OpenedBrace),
-            ClosingBrace => op_node(Op::ClosedBrace),
-            OpeningSquare => op_node(Op::OpenedSquare),
-            ClosingSquare => op_node(Op::ClosedSquare),
-            Equals => op_node(Op::Equals),
-            Termination => op_node(Op::Terminator),
-            Kleene => op_node(Op::Kleene),
-            OpeningGroup => op_node(Op::OpenedGroup),
-            ClosingGroup => op_node(Op::ClosedGroup),
-            Optional => op_node(Op::Optional),
-            Repeat => op_node(Op::Repeat),
-            String(s) => Expr::Literal { span, str: s },
-            Identifier(s) => Expr::Nonterminal { span, name: s },
-            Regex(s) => Expr::Regex { span, pattern: s },
-            Newline => unreachable!(),
+            Tp::Alternation => op_node(Op::Alternation),
+            Tp::OpeningBrace => op_node(Op::OpenedBrace),
+            Tp::ClosingBrace => op_node(Op::ClosedBrace),
+            Tp::OpeningSquare => op_node(Op::OpenedSquare),
+            Tp::ClosingSquare => op_node(Op::ClosedSquare),
+            Tp::Equals => op_node(Op::Equals),
+            Tp::Termination => op_node(Op::Terminator),
+            Tp::Kleene => op_node(Op::Kleene),
+            Tp::OpeningGroup => op_node(Op::OpenedGroup),
+            Tp::ClosingGroup => op_node(Op::ClosedGroup),
+            Tp::Optional => op_node(Op::Optional),
+            Tp::Repeat => op_node(Op::Repeat),
+            Tp::String(str) => Expr::Literal { span, str },
+            Tp::Identifier(name) => Expr::Nonterminal { span, name },
+            Tp::Regex(pattern) => Expr::Regex { span, pattern },
+            Tp::Newline => unreachable!(),
         };
         self.push_node(node);
     }
 
     pub(crate) fn push_node(&mut self, n: Expr<'a>) {
-        self.token_pattern.push_str(n.node_pattern_code());
-        self.token_stack.push(n);
+        self.kind_pattern.push_str(n.node_pattern_code());
+        self.parse_stack.push(n);
     }
 
     pub(crate) fn peek_node(&self) -> Option<&Expr<'a>> {
-        self.token_stack.last()
+        self.parse_stack.last()
     }
 
     pub(crate) fn pop_node(&mut self) -> Option<Expr<'a>> {
-        self.token_pattern.pop();
-        self.token_stack.pop()
+        self.kind_pattern.pop();
+        self.parse_stack.pop()
+    }
+
+    pub(crate) fn into_parse_stack(self) -> Vec<Expr<'a>> {
+        self.parse_stack
     }
 
     /// Repeatedly reduce using the defined patterns until no more reductions can be made

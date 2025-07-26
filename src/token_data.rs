@@ -154,7 +154,10 @@ pub enum TokenPayload<'a> {
 }
 
 fn line_counter<'a>(lex: &mut Lexer<'a, TokenPayload<'a>>) -> Skip {
-    #[allow(clippy::naive_bytecount)]
+    #[expect(
+        clippy::naive_bytecount,
+        reason = "Don't need a whole dependency for doing this once"
+    )]
     let lines = lex
         .slice()
         .as_bytes()

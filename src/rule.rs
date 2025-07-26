@@ -32,9 +32,11 @@ impl<'a> Rule<'a> {
                 Choice { body, .. }
                 | Optional { body, .. }
                 | Repetition { body, .. }
+                | Rule {
+                    rule: crate::Rule { body, .. }, // Shouldn't be possible in practice but might as well cover it
+                    ..
+                }
                 | Group { body, .. } => stack.extend(body),
-
-                Rule { .. } => unreachable!(),
             }
         }
         nonterm_names
@@ -49,10 +51,7 @@ pub struct Grammar<'a> {
 impl Grammar<'_> {
     pub fn new(input: &str) -> Result<Grammar<'_>, EbnfError<'_>> {
         let tokens = tokenize(input)?;
-        //eprintln!("{:?}", &tokens[14..20]);
-
-        let mut tokens_buffer = &tokens[..];
-        let rules = parse_rules_from_tokens(input, &mut tokens_buffer)?;
+        let rules = parse_rules_from_tokens(input, &mut &tokens[..])?;
         Ok(rules.into_iter().collect())
     }
 
@@ -71,11 +70,10 @@ impl Grammar<'_> {
 
 impl<'a> FromIterator<Rule<'a>> for Grammar<'a> {
     fn from_iter<T: IntoIterator<Item = Rule<'a>>>(iter: T) -> Self {
-        let mut g = Self::default();
-        for r in iter {
-            g.rules.insert(r.name, r);
+        let name_values = iter.into_iter().map(|r| (r.name, r));
+        Grammar {
+            rules: name_values.collect(),
         }
-        g
     }
 }
 

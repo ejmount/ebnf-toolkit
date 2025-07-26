@@ -10,7 +10,6 @@ fn flatten_groups<'a>(n: &Expr<'a>) -> Option<Expr<'a>> {
         Expr::Group { body, .. } if body.len() == 1 => Some(body.first().unwrap().clone()),
         Expr::Optional { body, .. } if body.len() == 1 => {
             if let [Expr::Group { body, .. }] = &body[..] {
-                //let n = body.first().unwrap().clone();
                 let span = Span::union(body.iter());
 
                 Some(Expr::Optional {
@@ -25,7 +24,6 @@ fn flatten_groups<'a>(n: &Expr<'a>) -> Option<Expr<'a>> {
             body, one_needed, ..
         } if body.len() == 1 => {
             if let [Expr::Group { body, .. }] = &body[..] {
-                //let n = body.first().unwrap().clone();
                 let span = Span::union(body.iter());
 
                 Some(Expr::Repetition {
