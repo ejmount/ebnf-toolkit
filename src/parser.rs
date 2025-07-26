@@ -195,16 +195,8 @@ impl<'a> LrStack<'a> {
     ///
     /// This does not apply to (A|B|C...) because "A|B|" is invalid without looking even further ahead to the C
     /// For now its fine to have a stack of binary operators and simplify later.
-    pub(crate) fn reduce_until_shift_needed(&mut self) -> Result<(), (&Self, Expr<'a>)> {
+    pub(crate) fn reduce_until_shift_needed(&mut self) {
         let mut dirty = true;
-
-        #[cfg(any(debug_assertions, test))]
-        if !matches!(
-            self.token_stack.first().map(ExprKind::from),
-            None | Some(ExprKind::Nonterminal | ExprKind::Rule)
-        ) {
-            return Err((self, self.token_stack.first().unwrap().clone()));
-        }
         while dirty {
             dirty = false;
             for (r, f) in &*REDUCTION_PATTERNS {
@@ -219,6 +211,5 @@ impl<'a> LrStack<'a> {
                 }
             }
         }
-        Ok(())
     }
 }

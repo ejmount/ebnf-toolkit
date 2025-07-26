@@ -31,6 +31,7 @@ fn invalid_start() {
         "? = A;",
         "#'aaa' = A;",
         "A|B = A;",
+        "'hi' = A",
     ];
     for src in srcs {
         let err = Rule::new(src).unwrap_err();

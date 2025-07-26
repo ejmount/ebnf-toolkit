@@ -51,15 +51,7 @@ fn parse_rules_from_tokens<'a>(
         // There needs to be exactly one round of reducing where there is no remaining input, because the final token may be part of a reduction.
         // So this loop is half a cycle off of the intuitive shift-reduce order
 
-        stack.reduce_until_shift_needed().map_err(|(stack, n)| {
-            EbnfError::from_parse_error(
-                input,
-                stack.clone(),
-                n.span().start(),
-                Some(n.span().end()),
-                Some(FailureReason::InvalidRuleStart(n.clone())),
-            )
-        })?;
+        stack.reduce_until_shift_needed();
 
         #[cfg(debug_assertions)]
         if Some(n) == end_of_rule_expected && !matches!(stack.peek_node(), Some(Expr::Rule { .. }))

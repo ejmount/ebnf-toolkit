@@ -69,7 +69,6 @@ impl Eq for EbnfError<'_> {}
 #[derive(Debug, Clone)]
 pub enum FailureReason<'a> {
     TerminatorNotEndingRule(Vec<Expr<'a>>),
-    InvalidRuleStart(Expr<'a>),
     ExhaustedInput(Vec<Expr<'a>>),
 }
 
@@ -158,22 +157,6 @@ fn handle_parse_error<'a>(
             attach_stack_to_report(report, nodes)
         }
 
-        FailureReason::InvalidRuleStart(incorrect_node) => {
-            let found_msg = match ExprKind::from(incorrect_node) {
-                ExprKind::Literal => "string literal",
-                ExprKind::Regex => "regular expression",
-                ExprKind::UnparsedOperator => "operator",
-                ExprKind::Group => "list of terms", // unreachable?
-                ExprKind::Choice => "alternatives",
-                ExprKind::Repetition => "repetition",
-                ExprKind::Optional => "optional",
-                ExprKind::Rule | ExprKind::Nonterminal => unreachable!(),
-            };
-            report.with_label(    Label::new(("<input>", start..end.unwrap_or(start + 1)))
-                    .with_message(format!("Tried to start parsing a rule here; expected single non-terminal, found {found_msg}"))
-                    .with_color(col),
-            )
-        }
         FailureReason::TerminatorNotEndingRule(nodes) => {
             for n in nodes {
                 if let Expr::UnparsedOperator { span, op } = n {
@@ -195,15 +178,6 @@ fn handle_parse_error<'a>(
                     }
                 }
             }
-            // dbg!(nodes.iter().position(|n| {
-            //     matches!(
-            //         n,
-            //         Expr::UnparsedOperator {
-            //             op: Operator::Equals,
-            //             ..
-            //         }
-            //     )
-            // }));
             if let Some(equals) = nodes.iter().position(|n| {
                 matches!(
                     n,

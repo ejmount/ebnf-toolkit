@@ -1,0 +1,6 @@
+---
+source: tests/irc.rs
+assertion_line: 52
+expression: "rules.get(\"trailing\").unwrap()"
+---
+Rule { name: "trailing", body: [Repetition { span: Span { start: 809, end: 831, line_offset_start: (19, 23), line_offset_end: (19, 45) }, body: [Choice { span: Span { start: 809, end: 831, line_offset_start: (19, 23), line_offset_end: (19, 45) }, body: [Literal { span: Span { start: 809, end: 812, line_offset_start: (19, 23), line_offset_end: (19, 26) }, str: ":" }, Literal { span: Span { start: 815, end: 818, line_offset_start: (19, 29), line_offset_end: (19, 32) }, str: " " }, Nonterminal { span: Span { start: 821, end: 831, line_offset_start: (19, 35), line_offset_end: (19, 45) }, name: "nospcrlfcl" }] }], one_needed: false }] }

@@ -1,0 +1,5 @@
+---
+source: tests/failures_displays.rs
+expression: err
+---
+[31mError:[0m Parse error: Unexpected end of input at index 8
