@@ -15,6 +15,7 @@ mod debug;
 mod error;
 mod expr;
 mod parser;
+mod proptesting;
 mod rule;
 mod simplification;
 mod token_data;
@@ -101,7 +102,7 @@ fn parse_rules_from_tokens<'a>(
 mod tests {
     use display_tree::format_tree;
 
-    use crate::Rule;
+    use crate::{Expr, Rule};
 
     #[test]
     fn basic_success() {
@@ -125,27 +126,25 @@ mod tests {
 
     #[test]
     fn flatten_success() {
-        let src = "success = A | (B | C) | D | E | F;";
+        let src = "A | (B | C) | D | E | F";
 
-        let parse = Rule::new(src).unwrap_or_else(|e| panic!("{e}"));
+        let parse = Expr::new(src).unwrap_or_else(|e| panic!("{e}"));
 
         let tree = format_tree!(parse);
         insta::assert_snapshot!(tree, @r"
-        Rule
-        ├─name: success
-        └─0: Choice [1:10..1:33]
-             └─0: Nonterminal [1:10..1:11]
-               │  └─ A
-               1: Nonterminal [1:15..1:16]
-               │  └─ B
-               2: Nonterminal [1:19..1:20]
-               │  └─ C
-               3: Nonterminal [1:24..1:25]
-               │  └─ D
-               4: Nonterminal [1:28..1:29]
-               │  └─ E
-               5: Nonterminal [1:32..1:33]
-                  └─ F
+        Choice [1:0..1:23]
+        └─0: Nonterminal [1:0..1:1]
+          │  └─ A
+          1: Nonterminal [1:5..1:6]
+          │  └─ B
+          2: Nonterminal [1:9..1:10]
+          │  └─ C
+          3: Nonterminal [1:14..1:15]
+          │  └─ D
+          4: Nonterminal [1:18..1:19]
+          │  └─ E
+          5: Nonterminal [1:22..1:23]
+             └─ F
         ");
     }
 }

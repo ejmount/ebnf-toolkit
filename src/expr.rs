@@ -1,4 +1,9 @@
-use crate::{Rule, token_data::Span};
+use crate::{
+    EbnfError, FailureReason, Rule,
+    parser::LrStack,
+    simplification::simplify_node,
+    token_data::{Span, tokenize},
+};
 use std::fmt::Display;
 use strum::{EnumDiscriminants, EnumProperty, IntoStaticStr, VariantNames};
 
@@ -44,7 +49,31 @@ pub enum Expr<'a> {
     },
 }
 
-impl Expr<'_> {
+impl<'a> Expr<'a> {
+    pub fn new(input: &'a str) -> Result<Self, EbnfError<'a>> {
+        let tokens = tokenize(input)?;
+        let mut stack = LrStack::new();
+        for token in tokens {
+            stack.push_token(token);
+            stack.reduce_until_shift_needed();
+        }
+        let token_stack = stack.into_parse_stack();
+        if token_stack.len() == 1 {
+            let mut expr = token_stack
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| unreachable!());
+            simplify_node(&mut expr);
+            Ok(expr)
+        } else {
+            Err(EbnfError::ParseError {
+                input,
+                offset: input.len(),
+                reason: Some(FailureReason::ExhaustedInput(token_stack)),
+            })
+        }
+    }
+
     pub fn span(&self) -> Span {
         match self {
             Expr::Literal { span, .. }
@@ -70,7 +99,7 @@ impl Expr<'_> {
 
     pub(crate) fn apply_replacement(
         &mut self,
-        func: &mut impl for<'a> FnMut(&Expr<'a>) -> Option<Expr<'a>>,
+        func: &mut impl for<'b> FnMut(&Expr<'a>) -> Option<Expr<'a>>,
     ) {
         match self {
             Expr::Rule {
@@ -189,124 +218,4 @@ pub enum Operator {
     Optional,
     #[strum(props(repr = "+"))]
     Repeat,
-}
-
-#[cfg(test)]
-mod test {
-    use crate::simplification::simplify_node;
-    use crate::token_data::DUMMY_SPAN;
-    use proptest::prelude::*;
-    use proptest::prop_oneof;
-
-    const NAMES: [&str; 128] = const {
-        const SPACING: usize = 4;
-        const DIGITS: [u8; 10] = [b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9'];
-        const TEMPLATE: &str = "stringXXXX";
-
-        const BYTE_BLOCKS: [[u8; TEMPLATE.len()]; 128] = {
-            let mut orig = [[0; TEMPLATE.len()]; 128];
-            let mut i = 0;
-            while i < orig.len() {
-                let mut k = 0;
-                while k < TEMPLATE.len() {
-                    if k < TEMPLATE.len() - SPACING {
-                        orig[i][k] = TEMPLATE.as_bytes()[k];
-                    } else {
-                        let diff = k - (TEMPLATE.len() - SPACING);
-                        let pow = SPACING - diff - 1;
-                        let shift = i / (10usize.pow(pow as u32));
-
-                        orig[i][k] = DIGITS[shift % 10];
-                    }
-                    k += 1;
-                }
-                i += 1;
-            }
-            orig
-        };
-
-        let mut output = [""; 128];
-        let mut a = 0;
-        while a < output.len() {
-            output[a] = match str::from_utf8(&BYTE_BLOCKS[a]) {
-                Ok(s) => s,
-                Err(_) => panic!("Whoops"),
-            };
-            a += 1;
-        }
-
-        output
-    };
-
-    fn node_strategy() -> impl Strategy<Value = Expr<'static>> {
-        let leaf = (0..NAMES.len() * 3).prop_map(|n| {
-            let typ = n % 3;
-            let n = n / 3;
-            match typ {
-                0 => Expr::Nonterminal {
-                    span: DUMMY_SPAN,
-                    name: NAMES[n],
-                },
-                1 => Expr::Literal {
-                    span: DUMMY_SPAN,
-                    str: NAMES[n],
-                },
-                2 => Expr::Regex {
-                    span: DUMMY_SPAN,
-                    pattern: NAMES[n],
-                },
-                _ => unreachable!(),
-            }
-        });
-
-        leaf.prop_recursive(2, 10, 2, |inner| {
-            prop_oneof![
-                prop::collection::vec(inner.clone(), 2).prop_map(|body| Expr::Choice {
-                    span: DUMMY_SPAN,
-                    body
-                }),
-                prop::collection::vec(inner.clone(), 2).prop_map(|body| Expr::Optional {
-                    span: DUMMY_SPAN,
-                    body
-                }),
-                (prop::collection::vec(inner.clone(), 2), any::<bool>()).prop_map(
-                    |(body, one_needed)| Expr::Repetition {
-                        span: DUMMY_SPAN,
-                        body,
-                        one_needed,
-                    }
-                ),
-                prop::collection::vec(inner.clone(), 2).prop_map(|body| Expr::Group {
-                    span: DUMMY_SPAN,
-                    body
-                }),
-            ]
-        })
-    }
-
-    use super::*;
-    use display_tree::AsTree;
-
-    proptest! {
-        #[test]
-        fn test_display(mut n in node_strategy()) {
-            simplify_node(&mut n);
-            let string = format!("{n}");
-            let rule = format!("rule = {string};");
-            let Rule { mut body, .. } = Rule::new(&rule).unwrap_or_else(|e| panic!("{e}"));
-            let mut actual = body.pop().unwrap();
-
-            simplify_node(&mut actual);
-
-            if n != actual {
-                let actual_tree = AsTree::new(&actual);
-                let n_tree = AsTree::new(&n);
-
-                eprintln!("Got: {actual}\nExpected:{n}");
-                eprintln!();
-                eprintln!("Trees\nGot:\n{actual_tree}\nExpected:\n{n_tree}");
-                assert_eq!(actual, n);
-            };
-        }
-    }
 }
