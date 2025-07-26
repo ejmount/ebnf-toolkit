@@ -4,10 +4,11 @@ use ariadne::{ColorGenerator, Label};
 use display_tree::Style;
 
 use crate::{
-    Expr,
+    Expr, Span,
     debug::print_vec_tree,
     expr::{ExprKind, Operator},
     parser::LrStack,
+    token_data::{Token, TokenPayload},
 };
 
 #[derive(Debug, Clone)]
@@ -151,9 +152,30 @@ fn handle_parse_error<'a>(
     let col = colors.next();
     match reason.as_ref().unwrap() {
         FailureReason::ExhaustedInput(nodes) => {
-            report = report.with_message(format!(
-                "Parse error: Unexpected end of input at index {start}",
-            ));
+            let mut stack = LrStack::new();
+            for n in nodes {
+                stack.push_node(n.clone());
+            }
+            let span = Span::union(nodes.iter());
+            stack.push_token(Token {
+                span,
+                payload: TokenPayload::Termination,
+            });
+            stack.reduce_until_shift_needed();
+
+            if let Some(Expr::Rule { .. }) = stack.pop_node() {
+                report = report.with_label(
+                    Label::new(("<input>", start..start))
+                        .with_message("Missing semicolon here")
+                        .with_color(colors.next()),
+                );
+            } else {
+                report = report.with_label(
+                    Label::new(("<input>", start..start))
+                        .with_message(format!("Unexpected end of input at index {start}"))
+                        .with_color(colors.next()),
+                );
+            }
             attach_stack_to_report(report, nodes)
         }
 

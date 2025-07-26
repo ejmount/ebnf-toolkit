@@ -191,7 +191,7 @@ impl<'a> LrStack<'a> {
 
     /// Repeatedly reduce using the defined patterns until no more reductions can be made
     ///
-    /// **NB** Assumes that a found match cannot be potentially extended with more input and still match.
+    /// **NB** Internally assumes that a found match cannot be potentially extended with more input and still match.
     ///
     /// This does not apply to (A|B|C...) because "A|B|" is invalid without looking even further ahead to the C
     /// For now its fine to have a stack of binary operators and simplify later.

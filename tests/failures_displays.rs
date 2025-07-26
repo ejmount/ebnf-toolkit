@@ -4,8 +4,12 @@ use insta::assert_compact_debug_snapshot;
 
 #[test]
 fn incomplete_rule() {
-    let src = "Foo = A|";
-    let err = Rule::new(src).unwrap_err();
+    let err = Rule::new("Foo = A|").unwrap_err();
+
+    println!("{err}");
+    insta::assert_snapshot!(err);
+
+    let err = Rule::new("Foo = A").unwrap_err();
 
     println!("{err}");
     insta::assert_snapshot!(err);
