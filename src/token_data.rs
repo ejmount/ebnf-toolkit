@@ -39,6 +39,16 @@ impl Span {
         self.start..self.end
     }
 
+    pub fn start_line(&self) -> (usize, usize) {
+        let (line, offset) = self.line_offset_start;
+        (line as usize, offset as _)
+    }
+
+    pub fn end_line(&self) -> (usize, usize) {
+        let (line, offset) = self.line_offset_end;
+        (line as usize, offset as _)
+    }
+
     pub(crate) fn union<'a>(iter: impl Iterator<Item = &'a Expr<'a>>) -> Span {
         iter.map(Expr::span)
             .reduce(|s, t| {
@@ -206,7 +216,7 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, EbnfError<'_>> {
 mod test {
     use insta::assert_compact_debug_snapshot;
 
-    use crate::token_data::tokenize;
+    use crate::{parse_rules_from_tokens, token_data::tokenize};
 
     #[test]
     fn basic_token_test() {
@@ -253,5 +263,24 @@ mod test {
 
         assert_eq!(err, err);
         assert_compact_debug_snapshot!(err, @r#"LexError { input: " A ? ££££", offset: 5 }"#);
+    }
+
+    #[test]
+    fn lines_test() {
+        let input = "foo = bar;\nbaz = baxx;";
+        let tokens = tokenize(input).unwrap();
+
+        let rules = parse_rules_from_tokens(input, &mut &tokens[..]).unwrap();
+
+        assert_eq!(rules.len(), 2);
+        assert_ne!(rules[0], rules[1]);
+
+        let s1 = rules[0].body.first().unwrap().span();
+        let s2 = rules[1].body.first().unwrap().span();
+
+        assert_eq!(s1.start_line().0, 1);
+        assert_eq!(s2.start_line().0, 2);
+        assert_eq!(s1.end_line().0, 1);
+        assert_eq!(s2.end_line().0, 2);
     }
 }
