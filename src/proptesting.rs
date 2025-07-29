@@ -6,6 +6,7 @@ use crate::token_data::DUMMY_SPAN;
 use display_tree::AsTree;
 use proptest::prelude::*;
 use proptest::prop_oneof;
+use strum::EnumProperty;
 
 const NUM_NAMES: usize = 128;
 
@@ -130,9 +131,36 @@ proptest! {
             assert_eq!(actual, n);
         };
     }
-}
 
-proptest! {
+    #[test]
+    fn test_span(n in node_strategy()) {
+        let string = format!("{n}");
+        let mut parsed = Expr::new(&string).unwrap();
+        parsed.apply_replacement(&mut |node| {
+            match node {
+                Expr::Literal { span, str } => {
+                assert_eq!(
+                    &string[span.range()],
+                    &format!("\"{str}\""),
+                    "Range = {:?}", span.range()
+                );
+                }
+                Expr::Nonterminal { span, name } => {
+                    assert_eq!(&string[span.range()], &format!("{name}"), "Range = {:?}", span.range());
+                }
+                Expr::UnparsedOperator { span, op } => {
+                    assert_eq!(
+                        &string[span.range()],
+                        &format!("{}", op.get_str("repr").unwrap()),
+                        "Range = {:?}", span.range()
+                    );
+                }
+                _ => {}
+            }
+            None
+        });
+    }
+
     #[test]
     fn display_roundtrip(mut original in node_strategy()) {
         simplify_node(&mut original);
