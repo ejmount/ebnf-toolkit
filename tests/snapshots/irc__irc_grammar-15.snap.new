@@ -1,6 +1,0 @@
----
-source: tests/irc.rs
-assertion_line: 50
-expression: "rules.get(\"parameters\").unwrap()"
----
-Rule { name: "parameters", body: [Repetition { span: Span { start: 691, end: 703, line_offset_start: (17, 23), line_offset_end: (17, 35) }, body: [Nonterminal { span: Span { start: 691, end: 696, line_offset_start: (17, 23), line_offset_end: (17, 28) }, name: "SPACE" }, Nonterminal { span: Span { start: 697, end: 703, line_offset_start: (17, 29), line_offset_end: (17, 35) }, name: "middle" }], one_needed: false }, Optional { span: Span { start: 709, end: 727, line_offset_start: (17, 41), line_offset_end: (17, 59) }, body: [Nonterminal { span: Span { start: 709, end: 714, line_offset_start: (17, 41), line_offset_end: (17, 46) }, name: "SPACE" }, Literal { span: Span { start: 715, end: 718, line_offset_start: (17, 47), line_offset_end: (17, 50) }, str: ":" }, Nonterminal { span: Span { start: 719, end: 727, line_offset_start: (17, 51), line_offset_end: (17, 59) }, name: "trailing" }] }] }

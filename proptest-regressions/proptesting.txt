@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c2b8f07c07665d6cce4b1025c6e7b3658b44cabacb94eb4e73b1dcce97025cf2 # shrinks to n = Literal { span: Span { start: 18446744073709551614, end: 18446744073709551615, line_offset_start: (4294967294, 0), line_offset_end: (4294967294, 2) }, str: "string0051" }

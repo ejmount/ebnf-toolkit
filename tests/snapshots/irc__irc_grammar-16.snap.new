@@ -1,6 +1,0 @@
----
-source: tests/irc.rs
-assertion_line: 51
-expression: "rules.get(\"middle\").unwrap()"
----
-Rule { name: "middle", body: [Nonterminal { span: Span { start: 752, end: 762, line_offset_start: (18, 21), line_offset_end: (18, 31) }, name: "nospcrlfcl" }, Repetition { span: Span { start: 765, end: 781, line_offset_start: (18, 34), line_offset_end: (18, 50) }, body: [Choice { span: Span { start: 765, end: 781, line_offset_start: (18, 34), line_offset_end: (18, 50) }, body: [Literal { span: Span { start: 765, end: 768, line_offset_start: (18, 34), line_offset_end: (18, 37) }, str: ":" }, Nonterminal { span: Span { start: 771, end: 781, line_offset_start: (18, 40), line_offset_end: (18, 50) }, name: "nospcrlfcl" }] }], one_needed: false }] }
