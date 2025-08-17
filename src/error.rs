@@ -133,20 +133,35 @@ fn handle_parse_error<'a>(
     let mut colors = ColorGenerator::new();
 
     let col = colors.next();
+
+    let nodes = match reason.as_ref().unwrap() {
+        FailureReason::ExhaustedInput(nodes) | FailureReason::TerminatorNotEndingRule(nodes) => {
+            nodes
+        }
+    };
+
+    for n in nodes {
+        if let Expr::UnparsedOperator { span, op } = n {
+            if *op != Operator::Equals && *op != Operator::Terminator {
+                let message = match *op {
+                    Operator::OpenedGroup | Operator::OpenedSquare => "Possible unclosed bracket",
+                    Operator::Kleene | Operator::Optional | Operator::Repeat => {
+                        "Could not apply to preceding term"
+                    }
+                    _ => "Operator not understood",
+                };
+                report = report.with_label(
+                    Label::new(("<input>", span.start()..span.end()))
+                        .with_color(colors.next())
+                        .with_message(message),
+                );
+            }
+        }
+    }
+
     match reason.as_ref().unwrap() {
         FailureReason::ExhaustedInput(nodes) => {
-            let mut stack = LrStack::new();
-            for n in nodes {
-                stack.push_node(n.clone());
-            }
-            let span = Span::union(nodes.iter());
-            stack.push_token(Token {
-                span,
-                payload: TokenPayload::Termination,
-            });
-            stack.reduce_until_shift_needed();
-
-            if let Some(Expr::Rule { .. }) = stack.pop_node() {
+            if check_missing_terminator(nodes) {
                 report = report.with_label(
                     Label::new(("<input>", offset..offset))
                         .with_message("Missing semicolon here")
@@ -163,26 +178,6 @@ fn handle_parse_error<'a>(
         }
 
         FailureReason::TerminatorNotEndingRule(nodes) => {
-            for n in nodes {
-                if let Expr::UnparsedOperator { span, op } = n {
-                    if *op != Operator::Equals && *op != Operator::Terminator {
-                        let message = match *op {
-                            Operator::OpenedGroup | Operator::OpenedSquare => {
-                                "Possible unclosed bracket"
-                            }
-                            Operator::Kleene | Operator::Optional | Operator::Repeat => {
-                                "Could not apply to preceding term"
-                            }
-                            _ => "Operator not understood",
-                        };
-                        report = report.with_label(
-                            Label::new(("<input>", span.start()..span.end()))
-                                .with_color(colors.next())
-                                .with_message(message),
-                        );
-                    }
-                }
-            }
             if let Some(equals) = nodes.iter().position(|n| {
                 matches!(
                     n,
@@ -212,6 +207,20 @@ fn handle_parse_error<'a>(
             attach_stack_to_report(report, nodes)
         }
     }
+}
+
+fn check_missing_terminator(nodes: &[Expr<'_>]) -> bool {
+    let mut stack = LrStack::new();
+    for n in nodes {
+        stack.push_node(n.clone());
+    }
+    let span = Span::union(nodes.iter());
+    stack.push_token(Token {
+        span,
+        payload: TokenPayload::Termination,
+    });
+    stack.reduce_until_shift_needed();
+    matches!(stack.pop_node(), Some(Expr::Rule { .. }))
 }
 
 fn attach_stack_to_report<'a>(report: ReportType<'a>, nodes: &[Expr<'_>]) -> ReportType<'a> {
