@@ -15,30 +15,40 @@ use crate::{
 
 type ReportType<'a> = ReportBuilder<'a, (&'static str, Range<usize>)>;
 
+/// A struct describing possible errors that mean an input could not be successfully parsed into the requested type
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum EbnfError<'a> {
+    /// Part of the input was not recognised as valid syntax for an expression
     LexError {
+        #[expect(missing_docs)]
         input: &'a str,
+        #[expect(missing_docs)]
         offset: usize,
     },
+    /// Lexing succeeded but constructing the tree failed
     ParseError {
+        #[expect(missing_docs)]
         input: &'a str,
+        #[expect(missing_docs)]
         offset: usize,
         /// This is a guess, it may be wrong.
         /// Its also unstable and errors in the same circumstances may produce different values for this field without notice
         reason: Option<FailureReason<'a>>,
     },
+    /// There was nothing to parse
     EmptyInput,
 }
 
 impl EbnfError<'_> {
-    pub fn input(&self) -> Option<&str> {
+    /// The input string that was being parsed
+    pub fn input(&self) -> &str {
         match self {
-            EbnfError::LexError { input, .. } | EbnfError::ParseError { input, .. } => Some(input),
-            _ => None,
+            EbnfError::LexError { input, .. } | EbnfError::ParseError { input, .. } => input,
+            EbnfError::EmptyInput => "",
         }
     }
+    /// the offset within the overall string where the problem occured
     pub fn offset(&self) -> Option<usize> {
         match self {
             EbnfError::LexError { offset, .. } | EbnfError::ParseError { offset, .. } => {
@@ -58,7 +68,7 @@ impl PartialEq for EbnfError<'_> {
             (this @ LexError { .. }, other @ LexError { .. })
             | (this @ ParseError { .. }, other @ ParseError { .. }) => this
                 .input()
-                .cmp(&other.input())
+                .cmp(other.input())
                 .then(this.offset().cmp(&other.offset()))
                 .is_eq(),
 
@@ -69,10 +79,15 @@ impl PartialEq for EbnfError<'_> {
 
 impl Eq for EbnfError<'_> {}
 
+/// More detail about the potential cause of a [`ParseError`](`EbnfError::ParseError`).
+///
+/// These values are provisional, and generated on a best-effort basis. While Semver applies to the enum structure itself (no variants will disappear in a patch release, *etc*) the exact logic for which `FailureReason` (if any) is returned from any particular invalid input are **not stable and may change in a point release** - tests, *etc*, should check that an invalid input produces a `ParseError` without examining any further. That said, a false positive or incorrect suggestion for why a parse error has occured is still considered a bug; filing an issue describing incorrect reports or suggestions for improving the messages would be appreciated.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum FailureReason<'a> {
+    /// Encountered the `;` ending a rule, but preceding input did not parse as a rule body successfully
     TerminatorNotEndingRule(Vec<Expr<'a>>),
+    /// the tail of the input is valid, but more input was expected
     ExhaustedInput(Vec<Expr<'a>>),
 }
 

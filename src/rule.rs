@@ -1,14 +1,23 @@
-use std::collections::{HashMap, VecDeque};
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, VecDeque, hash_map},
+    hash::Hash,
+    ops::Index,
+};
 
-use crate::{Expr, error::EbnfError, parse_rules_from_tokens, token_data::tokenize};
+use crate::{Expr, Span, error::EbnfError, parse_rules_from_tokens, token_data::tokenize};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Rule<'a> {
     pub name: &'a str,
     pub body: Vec<Expr<'a>>,
 }
 
 impl<'a> Rule<'a> {
+    /// Parses a rule from an input string
+    ///
+    /// # Errors
+    /// If the input string is ill-formed, an [`EbnfError`] is returned. See that type for possible reasons why.
     pub fn new(input: &str) -> Result<Rule<'_>, EbnfError> {
         let tokens = tokenize(input)?;
 
@@ -19,6 +28,7 @@ impl<'a> Rule<'a> {
             .ok_or(EbnfError::EmptyInput)
     }
 
+    /// Returns a list of all the nonterminal names that appear anywhere within this rule
     pub fn nonterminals(&self) -> Vec<&'a str> {
         #[allow(clippy::enum_glob_use)]
         use Expr::*;
@@ -48,7 +58,11 @@ pub struct Grammar<'a> {
     rules: HashMap<&'a str, Rule<'a>>,
 }
 
-impl Grammar<'_> {
+impl<'a> Grammar<'a> {
+    /// Parses a grammar - a sequence of [`Rule`]s from an input string.
+    ///
+    /// # Errors
+    /// If the input string is ill-formed, an [`EbnfError`] is returned. See that type for possible reasons why.
     pub fn new(input: &str) -> Result<Grammar<'_>, EbnfError<'_>> {
         let tokens = tokenize(input)?;
         let rules = parse_rules_from_tokens(input, &mut &tokens[..])?;
@@ -62,6 +76,19 @@ impl Grammar<'_> {
     {
         self.rules.get(&i)
     }
+
+    /// Tests if any of the rules contain a nonterminal name that does not have a corresponding entry in this `Grammar`.
+    /// If one exists, returns the name of the rule containing the nonterminal, and the name of the missing rule itself. Else returns `None`.
+    /// ```rust
+    /// # use ebnf_toolkit::Grammar;
+    /// let src = "A = B;";
+    /// let g = Grammar::new(src).unwrap();
+    /// assert_eq!(g.first_dangling_reference(), Some(("A", "B")));
+    ///
+    /// let recurse = "A = A;";
+    /// let g2 = Grammar::new(recurse).unwrap();
+    /// assert_eq!(g2.first_dangling_reference(), None);
+    /// ```
     pub fn first_dangling_reference(&self) -> Option<(&str, &str)> {
         for rule in self.rules.values() {
             let refers = rule.nonterminals();

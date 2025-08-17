@@ -7,49 +7,80 @@ use crate::{
 use std::fmt::Display;
 use strum::{EnumDiscriminants, EnumProperty, IntoStaticStr, VariantNames};
 
-#[derive(Debug, Clone, PartialEq, Eq, EnumDiscriminants)]
+/// A node in the syntax tree of a EBNF rule
+#[derive(Debug, Clone, PartialEq, Eq, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(ExprKind), derive(VariantNames, IntoStaticStr))]
+#[non_exhaustive]
 pub enum Expr<'a> {
+    /// A terminal, a string, a whole string and nothing but the string
     Literal {
+        #[expect(missing_docs, reason = "Obvious")]
         span: Span,
+        #[expect(missing_docs, reason = "Obvious")]
         str: &'a str,
     },
+    /// the name of some other production rule
     Nonterminal {
+        #[expect(missing_docs, reason = "Obvious")]
         span: Span,
+        #[expect(missing_docs, reason = "Obvious")]
         name: &'a str,
     },
+    /// Exactly one of the child nodes
     Choice {
+        #[expect(missing_docs, reason = "Obvious")]
         span: Span,
+        #[expect(missing_docs, reason = "Obvious")]
         body: Vec<Expr<'a>>,
     },
+    /// Either the entire sequence of child nodes in order, or nothing
     Optional {
+        #[expect(missing_docs, reason = "Obvious")]
         span: Span,
+        #[expect(missing_docs, reason = "Obvious")]
         body: Vec<Expr<'a>>,
     },
+    /// The child nodes, in sequence, repeated any number of times, possibly including zero.
     Repetition {
+        #[expect(missing_docs, reason = "Obvious")]
         span: Span,
+        #[expect(missing_docs, reason = "Obvious")]
         body: Vec<Expr<'a>>,
+        /// If at least one repetition is needed or none
         one_needed: bool,
     },
+    /// A regular expression on the input string.
+    ///
+    /// A valid regex is defined by the [regex](https://docs.rs/regex/latest/regex/) crate, over terminal characters, not over other EBNF rules.
     Regex {
+        #[expect(missing_docs, reason = "Obvious")]
         span: Span,
+        #[expect(missing_docs, reason = "Obvious")]
         pattern: &'a str,
     },
+    /// The child nodes, in order, exactly once. You are unlikely to see this in parsing output; see [the root docstring](`crate`) for why.
     Group {
+        #[expect(missing_docs, reason = "Obvious")]
         span: Span,
+        #[expect(missing_docs, reason = "Obvious")]
         body: Vec<Expr<'a>>,
     },
-    UnparsedOperator {
-        span: Span,
-        op: Operator,
-    },
+    #[doc(hidden)]
+    UnparsedOperator { span: Span, op: Operator },
+    /// An entire EBNF rule. This is not the same type as [`Rule`] and user code should use the latter, but it's included as part of `Expr` for internal reasons.
     Rule {
+        #[expect(missing_docs, reason = "Obvious")]
         span: Span,
+        #[expect(missing_docs, reason = "Obvious")]
         rule: Rule<'a>,
     },
 }
 
 impl<'a> Expr<'a> {
+    /// Parse a given string into an `Expr`. For parsing an entire rule, instead prefer [`Rule::new`].
+    ///
+    /// # Errors
+    /// If the input string is ill-formed, an [`EbnfError`] is returned. See that type for possible reasons why.
     pub fn new(input: &'a str) -> Result<Self, EbnfError<'a>> {
         let tokens = tokenize(input)?;
         let mut stack = LrStack::new();
@@ -58,7 +89,9 @@ impl<'a> Expr<'a> {
             stack.reduce_until_shift_needed();
         }
         let token_stack = stack.into_parse_stack();
-        if token_stack.len() == 1 {
+        if token_stack.len() == 1
+            && token_stack.first().map(ExprKind::from) != Some(ExprKind::UnparsedOperator)
+        {
             let mut expr = token_stack
                 .into_iter()
                 .next()
@@ -74,6 +107,7 @@ impl<'a> Expr<'a> {
         }
     }
 
+    /// The [`Span`] of the input this node and all of its children represent
     pub fn span(&self) -> Span {
         match self {
             Expr::Literal { span, .. }
@@ -192,7 +226,7 @@ impl Display for Expr<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumProperty, IntoStaticStr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumProperty, IntoStaticStr)]
 pub enum Operator {
     #[strum(props(repr = "("))]
     OpenedGroup,

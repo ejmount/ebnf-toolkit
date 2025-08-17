@@ -1,5 +1,6 @@
 use std::{
     fmt::{Debug, Display},
+    hash::Hash,
     ops::Range,
 };
 
@@ -8,8 +9,8 @@ use strum::{Display, EnumDiscriminants, EnumProperty, IntoStaticStr, VariantArra
 
 use crate::{Expr, error::EbnfError};
 
-// Sentinel for testing
-// Compares equal to any other Span so literal objects don't have to synthesize one
+/// Sentinel for testing
+/// Compares equal to any other Span so literal objects don't have to synthesize one to make [`Expr`] compare equal
 #[cfg(test)]
 pub(crate) const DUMMY_SPAN: Span = Span {
     start: usize::MAX - 1,
@@ -18,7 +19,9 @@ pub(crate) const DUMMY_SPAN: Span = Span {
     line_offset_end: (u32::MAX - 1, 2),
 };
 
-#[derive(Debug, Clone, Copy, Eq, PartialOrd, Ord)]
+/// A half-open range of the input string a `Node` came from
+#[allow(clippy::derived_hash_with_manual_eq)]
+#[derive(Debug, Clone, Copy, Eq, PartialOrd, Ord, Hash)]
 pub struct Span {
     start: usize,
     end: usize,
@@ -29,21 +32,26 @@ pub struct Span {
 }
 
 impl Span {
+    /// Beginning of the span, as a byte offset across potentially multiple lines of string
     pub fn start(&self) -> usize {
         self.start
     }
+    /// One after the end of the span, as a byte  offset across potentially multiple lines of string
     pub fn end(&self) -> usize {
         self.end
     }
+    /// Passing this to `str::get` on the original input will produce the exact substring this [`Span`] came from
     pub fn range(&self) -> Range<usize> {
         self.start..self.end
     }
 
+    /// The line and byte offset within the line of the start of this span. Lines count from 1
     pub fn start_line(&self) -> (usize, usize) {
         let (line, offset) = self.line_offset_start;
         (line as usize, offset as _)
     }
 
+    /// The line and byte offset within the line one after the end of this span. Lines count from 1
     pub fn end_line(&self) -> (usize, usize) {
         let (line, offset) = self.line_offset_end;
         (line as usize, offset as _)
@@ -66,6 +74,15 @@ impl Span {
     }
 }
 
+impl Display for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (start_line, start_off) = self.start_line();
+        let (end_line, end_off) = self.end_line();
+
+        write!(f, "[{start_line}:{start_off}..{end_line}:{end_off}]",)
+    }
+}
+
 impl PartialEq for Span {
     fn eq(&self, other: &Self) -> bool {
         #[cfg(test)]
@@ -76,17 +93,6 @@ impl PartialEq for Span {
             .cmp(&other.start)
             .then(self.end.cmp(&other.end))
             .is_eq()
-    }
-}
-
-impl Display for Span {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Span {
-            line_offset_start: (start_line, start_off),
-            line_offset_end: (end_line, end_off),
-            ..
-        } = self;
-        write!(f, "[{start_line}:{start_off}..{end_line}:{end_off}]",)
     }
 }
 

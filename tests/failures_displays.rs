@@ -17,7 +17,7 @@ fn incomplete_rule() {
 
 #[test]
 fn invalid_syntax_rule() {
-    let srcs = ["Foo = A|;", "Foo = (A;", "Foo = (?;"];
+    let srcs = ["Foo = A|;", "Foo = (A;", "Rule = (?;"];
     for src in srcs {
         let err = Rule::new(src).unwrap_err();
 
