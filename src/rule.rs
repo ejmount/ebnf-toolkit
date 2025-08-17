@@ -45,7 +45,7 @@ impl<'a> Rule<'a> {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Grammar<'a> {
-    pub rules: HashMap<&'a str, Rule<'a>>,
+    rules: HashMap<&'a str, Rule<'a>>,
 }
 
 impl Grammar<'_> {
@@ -55,6 +55,13 @@ impl Grammar<'_> {
         Ok(rules.into_iter().collect())
     }
 
+    pub fn get<Q>(&self, i: Q) -> Option<&Rule>
+    where
+        &'a str: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.rules.get(&i)
+    }
     pub fn first_dangling_reference(&self) -> Option<(&str, &str)> {
         for rule in self.rules.values() {
             let refers = rule.nonterminals();
@@ -65,6 +72,17 @@ impl Grammar<'_> {
             }
         }
         None
+    }
+}
+
+impl<'a, B> Index<B> for Grammar<'a>
+where
+    B: Borrow<str>,
+{
+    type Output = Rule<'a>;
+    fn index(&self, index: B) -> &Self::Output {
+        let s = index.borrow();
+        &self.rules[s]
     }
 }
 

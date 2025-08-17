@@ -31,26 +31,24 @@ fn irc_grammar() {
 
     assert_eq!(g.first_dangling_reference(), None);
 
-    let rules = g.rules;
-
-    assert_compact_debug_snapshot!(rules.get("tags").unwrap());
-    assert_compact_debug_snapshot!(rules.get("tag").unwrap());
-    assert_compact_debug_snapshot!(rules.get("key").unwrap());
-    assert_compact_debug_snapshot!(rules.get("vendor").unwrap());
-    assert_compact_debug_snapshot!(rules.get("key_name").unwrap());
-    assert_compact_debug_snapshot!(rules.get("command").unwrap());
-    assert_compact_debug_snapshot!(rules.get("escaped_value").unwrap());
-    assert_compact_debug_snapshot!(rules.get("client_prefix").unwrap());
-    assert_compact_debug_snapshot!(rules.get("source").unwrap());
-    assert_compact_debug_snapshot!(rules.get("username").unwrap());
-    assert_compact_debug_snapshot!(rules.get("nick").unwrap());
-    assert_compact_debug_snapshot!(rules.get("user").unwrap());
-    assert_compact_debug_snapshot!(rules.get("servername").unwrap());
-    assert_compact_debug_snapshot!(rules.get("host").unwrap());
-    assert_compact_debug_snapshot!(rules.get("parameters").unwrap());
-    assert_compact_debug_snapshot!(rules.get("middle").unwrap());
-    assert_compact_debug_snapshot!(rules.get("trailing").unwrap());
-    assert_compact_debug_snapshot!(rules.get("nospcrlfcl").unwrap());
-    assert_compact_debug_snapshot!(rules.get("SPACE").unwrap());
-    assert_compact_debug_snapshot!(rules.get("crlf").unwrap());
+    assert_compact_debug_snapshot!(g.get("tags").unwrap());
+    assert_compact_debug_snapshot!(g.get("tag").unwrap());
+    assert_compact_debug_snapshot!(g.get("key").unwrap());
+    assert_compact_debug_snapshot!(g.get("vendor").unwrap());
+    assert_compact_debug_snapshot!(g.get("key_name").unwrap());
+    assert_compact_debug_snapshot!(g.get("command").unwrap());
+    assert_compact_debug_snapshot!(g.get("escaped_value").unwrap());
+    assert_compact_debug_snapshot!(g.get("client_prefix").unwrap());
+    assert_compact_debug_snapshot!(g.get("source").unwrap());
+    assert_compact_debug_snapshot!(g.get("username").unwrap());
+    assert_compact_debug_snapshot!(g.get("nick").unwrap());
+    assert_compact_debug_snapshot!(g.get("user").unwrap());
+    assert_compact_debug_snapshot!(g.get("servername").unwrap());
+    assert_compact_debug_snapshot!(g.get("host").unwrap());
+    assert_compact_debug_snapshot!(g.get("parameters").unwrap());
+    assert_compact_debug_snapshot!(g.get("middle").unwrap());
+    assert_compact_debug_snapshot!(g.get("trailing").unwrap());
+    assert_compact_debug_snapshot!(g.get("nospcrlfcl").unwrap());
+    assert_compact_debug_snapshot!(g.get("SPACE").unwrap());
+    assert_compact_debug_snapshot!(g.get("crlf").unwrap());
 }
