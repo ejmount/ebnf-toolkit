@@ -131,6 +131,8 @@ pub(crate) fn fmt_vec<T: DisplayTree>(v: &[T], style: Style) -> impl Iterator<It
 #[cfg(test)]
 mod test {
 
+    use std::borrow::Cow;
+
     use super::*;
     use crate::{expr::Operator, token_data::DUMMY_SPAN};
     #[test]
@@ -164,7 +166,10 @@ mod test {
         ];
         let n = Expr::Rule {
             span,
-            rule: Rule { name: "name", body },
+            rule: Rule {
+                name: Cow::Borrowed("name"),
+                body,
+            },
         };
         let tree = AsTree::new(&n);
 

@@ -42,6 +42,8 @@ static REDUCTION_PATTERNS: LazyLock<[(Regex, Reducer); 8]> = LazyLock::new(|| {
 type Reducer = for<'a> fn(&[Expr<'a>]) -> (Expr<'a>, usize);
 
 mod rules {
+    use std::borrow::Cow;
+
     use crate::{
         expr::{Expr, ExprKind, Operator},
         rule::Rule,
@@ -113,7 +115,7 @@ mod rules {
         let rule_node = Expr::Rule {
             span,
             rule: Rule {
-                name,
+                name: Cow::Borrowed(*name),
                 body: body.to_vec(),
             },
         };

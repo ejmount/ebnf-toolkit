@@ -1,6 +1,6 @@
 use std::{
-    borrow::Borrow,
-    collections::{HashMap, VecDeque, hash_map},
+    borrow::Cow,
+    collections::{HashMap, VecDeque},
     hash::Hash,
     ops::Index,
 };
@@ -9,7 +9,7 @@ use crate::{Expr, Span, error::EbnfError, parse_rules_from_tokens, token_data::t
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Rule<'a> {
-    pub name: &'a str,
+    pub name: Cow<'a, str>,
     pub body: Vec<Expr<'a>>,
 }
 
@@ -55,7 +55,7 @@ impl<'a> Rule<'a> {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Grammar<'a> {
-    rules: HashMap<&'a str, Rule<'a>>,
+    rules: HashMap<Cow<'a, str>, Rule<'a>>,
 }
 
 impl<'a> Grammar<'a> {
@@ -69,12 +69,8 @@ impl<'a> Grammar<'a> {
         Ok(rules.into_iter().collect())
     }
 
-    pub fn get<Q>(&self, i: Q) -> Option<&Rule>
-    where
-        &'a str: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        self.rules.get(&i)
+    pub fn get(&self, name: &str) -> Option<&Rule> {
+        self.rules.get(name)
     }
 
     /// Tests if any of the rules contain a nonterminal name that does not have a corresponding entry in this `Grammar`.
@@ -94,7 +90,7 @@ impl<'a> Grammar<'a> {
             let refers = rule.nonterminals();
             for r in refers {
                 if !self.rules.contains_key(r) {
-                    return Some((rule.name, r));
+                    return Some((&*rule.name, r));
                 }
             }
         }
@@ -102,26 +98,26 @@ impl<'a> Grammar<'a> {
     }
 }
 
-impl<'a, B> Index<B> for Grammar<'a>
-where
-    B: Borrow<str>,
-{
+impl<'a> Index<&str> for Grammar<'a> {
     type Output = Rule<'a>;
-    fn index(&self, index: B) -> &Self::Output {
-        let s = index.borrow();
-        &self.rules[s]
+    fn index(&self, index: &str) -> &Self::Output {
+        &self.rules[index]
     }
 }
 
 impl<'a> FromIterator<Rule<'a>> for Grammar<'a> {
     fn from_iter<T: IntoIterator<Item = Rule<'a>>>(iter: T) -> Self {
-        let mut rules: HashMap<&'a str, Rule<'a>> = HashMap::new();
-        for (name, new_rule) in iter.into_iter().map(|r| (r.name, r)) {
-            if let hash_map::Entry::Occupied(o) = rules.entry(name) {
-                let old_rule = o.remove();
-                rules.insert(name, merge_duplicate_rule(old_rule, new_rule));
+        let mut rules: HashMap<Cow<'a, str>, Rule<'a>> = HashMap::new();
+        for new_rule in iter {
+            if let Some(old_rule) = rules.remove(&new_rule.name) {
+                let new_body = merge_duplicate_rule(old_rule.body, new_rule.body);
+                let combined_rule = Rule {
+                    name: old_rule.name,
+                    body: new_body,
+                };
+                rules.insert(combined_rule.name.clone(), combined_rule);
             } else {
-                rules.insert(name, new_rule);
+                rules.insert(new_rule.name.clone(), new_rule);
             }
         }
 
@@ -129,7 +125,7 @@ impl<'a> FromIterator<Rule<'a>> for Grammar<'a> {
     }
 }
 
-fn merge_duplicate_rule<'a>(old_rule: Rule<'a>, new_rule: Rule<'a>) -> Rule<'a> {
+fn merge_duplicate_rule<'a>(old_rule: Vec<Expr<'a>>, new_rule: Vec<Expr<'a>>) -> Vec<Expr<'a>> {
     fn unwrap_choice_items(mut e: Vec<Expr<'_>>) -> Vec<Expr<'_>> {
         if e.len() == 1
             && let Some(Expr::Choice { .. }) = e.first()
@@ -143,19 +139,18 @@ fn merge_duplicate_rule<'a>(old_rule: Rule<'a>, new_rule: Rule<'a>) -> Rule<'a> 
         }
     }
 
-    let old_body = unwrap_choice_items(old_rule.body);
-    let new_body = unwrap_choice_items(new_rule.body);
+    let old_body = unwrap_choice_items(old_rule);
+    let new_body = unwrap_choice_items(new_rule);
     let body: Vec<_> = old_body.into_iter().chain(new_body).collect();
     let span = Span::union(body.iter());
 
-    Rule {
-        name: old_rule.name,
-        body: vec![Expr::Choice { span, body }],
-    }
+    vec![Expr::Choice { span, body }]
 }
 
 #[cfg(test)]
 mod test {
+    use std::borrow::Cow;
+
     use crate::{Expr, Grammar, Rule, token_data::DUMMY_SPAN};
     use display_tree::AsTree;
 
@@ -173,7 +168,11 @@ mod test {
             Expr::Nonterminal { span, name: "C" },
         ];
 
-        let nonterms = Rule { body, name: "" }.nonterminals();
+        let nonterms = Rule {
+            body,
+            name: Cow::Borrowed(""),
+        }
+        .nonterminals();
         insta::assert_compact_debug_snapshot!(nonterms, @r#"["C", "A", "B"]"#);
     }
 
