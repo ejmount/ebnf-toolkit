@@ -1,20 +1,41 @@
-use crate::{Expr, Span};
+use crate::{Expr, Span, expr::ExprKind};
 
 pub(crate) fn simplify_node(n: &mut Expr) {
-    n.apply_replacement(&mut flatten_groups);
+    n.apply_replacement(&mut remove_redundant_layers);
     n.apply_replacement(&mut flatten_choices);
 }
 
-fn flatten_groups<'a>(n: &Expr<'a>) -> Option<Expr<'a>> {
+fn remove_redundant_layers<'a>(n: &Expr<'a>) -> Option<Expr<'a>> {
+    fn flatten_groups<'a>(groups: &[Expr<'a>]) -> Vec<Expr<'a>> {
+        let mut new_body = vec![];
+        for expr in groups {
+            match &expr {
+                Expr::Group { body, .. } => new_body.extend(body.iter().cloned()),
+                &other => new_body.push(other.clone()),
+            }
+        }
+        new_body
+    }
     match n {
-        Expr::Group { body, .. } if body.len() == 1 => Some(body.first().unwrap().clone()),
-        Expr::Optional { body, .. } if body.len() == 1 => {
-            if let [Expr::Group { body, .. }] = &body[..] {
-                let span = Span::union(body.iter());
+        Expr::Group { body, .. } => {
+            let new_body = flatten_groups(body);
+            if new_body.len() == 1 {
+                Some(new_body.first().unwrap().clone())
+            } else {
+                Some(Expr::Group {
+                    span: Span::union(new_body.iter()),
+                    body: new_body,
+                })
+            }
+        }
+        Expr::Optional { body, .. } => {
+            if body.iter().any(|e| ExprKind::from(e) == ExprKind::Group) {
+                let new_body = flatten_groups(body);
+                let span = Span::union(new_body.iter());
 
                 Some(Expr::Optional {
                     span,
-                    body: body.clone(),
+                    body: new_body,
                 })
             } else {
                 None
@@ -22,13 +43,14 @@ fn flatten_groups<'a>(n: &Expr<'a>) -> Option<Expr<'a>> {
         }
         Expr::Repetition {
             body, one_needed, ..
-        } if body.len() == 1 => {
-            if let [Expr::Group { body, .. }] = &body[..] {
-                let span = Span::union(body.iter());
+        } => {
+            if body.iter().any(|e| ExprKind::from(e) == ExprKind::Group) {
+                let new_body = flatten_groups(body);
+                let span = Span::union(new_body.iter());
 
                 Some(Expr::Repetition {
                     span,
-                    body: body.clone(),
+                    body: new_body,
                     one_needed: *one_needed,
                 })
             } else {
