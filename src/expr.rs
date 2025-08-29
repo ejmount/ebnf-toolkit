@@ -122,6 +122,39 @@ impl<'a> Expr<'a> {
         }
     }
 
+    #[must_use]
+    /// Substitutes the body of the given rule into this expression whenever its name appears.
+    /// The substitution is only performed once, so a recursive rule will not cause infinite loops.
+    ///
+    /// ```
+    /// use ebnf_toolkit::Expr;
+    /// use ebnf_toolkit::Rule;
+    /// use display_tree::AsTree;
+    /// let a = Expr::new("(b b b)").unwrap();
+    /// let b = Rule::new("b = 'a' 'b';").unwrap();
+    /// let c = format!("{}", a.substitute(&b));
+    /// let expected = format!("{}", Expr::new("('a' 'b' 'a' 'b' 'a' 'b')").unwrap());
+    ///
+    /// assert_eq!(c, expected);
+    /// ```
+    pub fn substitute(&self, rule: &'a Rule<'a>) -> Expr<'a> {
+        let mut new = self.clone();
+        new.apply_replacement(&mut |n| {
+            if let &Expr::Nonterminal { name, .. } = n
+                && name == rule.name
+            {
+                Some(Expr::Group {
+                    body: rule.body.clone(),
+                    span: Span::union(rule.body.iter()),
+                })
+            } else {
+                None
+            }
+        });
+        simplify_node(&mut new);
+        new
+    }
+
     pub(crate) fn node_pattern_code(&self) -> &'static str {
         if let Expr::UnparsedOperator { op, .. } = self {
             op.get_str("repr").unwrap()
