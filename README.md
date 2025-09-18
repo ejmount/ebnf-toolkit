@@ -37,7 +37,7 @@ All whitespace is ignored. Comments are denoted by a `//` and continue to the en
 
 In the event that the input is malformed, error messages use [ariadne](https://crates.io/crates/ariadne) to make the cause of the problem as clear as possible.
 
-For instance, attempting to parse `rule = (?;` as a  results and invoking `Display` on the result produces the following:
+For instance, attempting to parse `rule = (?;` as a `Rule` and invoking `Display` on the result produces the following:
 
 ```plain
 Error:
