@@ -54,6 +54,16 @@ impl<'a> Rule<'a> {
         }
         nonterm_names
     }
+
+    /// Does this rule contain any reference to itself?
+    pub fn is_recursive(&self) -> bool {
+        self.nonterminals().contains(&&*self.name)
+    }
+
+    /// Whether this rule refers to any other rules or is entirely self-contained
+    pub fn contains_any_nonterminal(&self) -> bool {
+        self.body.iter().any(Expr::contains_nonterminal)
+    }
 }
 
 /// A set of EBNF rules

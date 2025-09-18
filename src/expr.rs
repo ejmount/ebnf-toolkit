@@ -155,6 +155,18 @@ impl<'a> Expr<'a> {
         new
     }
 
+    pub(crate) fn contains_nonterminal(&self) -> bool {
+        match self {
+            Expr::Nonterminal { .. } => true,
+            Expr::Literal { .. } | Expr::Regex { .. } | Expr::UnparsedOperator { .. } => false,
+            Expr::Choice { body, .. }
+            | Expr::Optional { body, .. }
+            | Expr::Repetition { body, .. }
+            | Expr::Group { body, .. } => body.iter().any(Expr::contains_nonterminal),
+            Expr::Rule { rule, .. } => rule.body.iter().any(Expr::contains_nonterminal),
+        }
+    }
+
     pub(crate) fn node_pattern_code(&self) -> &'static str {
         if let Expr::UnparsedOperator { op, .. } = self {
             op.get_str("repr").unwrap()
