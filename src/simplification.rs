@@ -86,6 +86,7 @@ fn flatten_choices<'a>(n: &Expr<'a>) -> Option<Expr<'a>> {
 #[cfg(test)]
 mod test {
     use display_tree::AsTree;
+    use insta::assert_compact_debug_snapshot;
 
     use crate::{simplification::simplify_node, token_data::DUMMY_SPAN};
     #[test]
@@ -117,6 +118,14 @@ mod test {
         let mut simplified = val.clone();
         simplify_node(&mut simplified);
 
-        println!("{}", AsTree::new(&simplified));
+        insta::assert_snapshot!(AsTree::new(&simplified), @r"
+        Choice [4294967294:0..4294967294:2]
+        └─0: Nonterminal [4294967294:0..4294967294:2]
+          │  └─ nonterminal0027
+          1: Nonterminal [4294967294:0..4294967294:2]
+          │  └─ nonterminal0028
+          2: Literal [4294967294:0..4294967294:2]
+             └─ 'literal1'
+        ");
     }
 }
