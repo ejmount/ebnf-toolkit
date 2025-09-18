@@ -176,18 +176,18 @@ mod test {
         insta::assert_snapshot!(tree, @r"
         Rule
         ├─name: name
-        └─0: Nonterminal [4294967294:0..4294967294:2]
+        └─0: Nonterminal [DUMMY]
           │  └─ Nonterm
-          1: Literal [4294967294:0..4294967294:2]
+          1: Literal [DUMMY]
           │  └─ 'Term'
-          2: UnparsedOperator [4294967294:0..4294967294:2]
+          2: UnparsedOperator [DUMMY]
           │  └─ Equals
-          3: Choice [4294967294:0..4294967294:2]
-             └─0: Optional [4294967294:0..4294967294:2]
-               │  └─0: Regex [4294967294:0..4294967294:2]
+          3: Choice [DUMMY]
+             └─0: Optional [DUMMY]
+               │  └─0: Regex [DUMMY]
                │       └─ .
-               1: Repetition [4294967294:0..4294967294:2]
-                  └─0: Regex [4294967294:0..4294967294:2]
+               1: Repetition [DUMMY]
+                  └─0: Regex [DUMMY]
                        └─ a
         ");
     }
@@ -208,30 +208,30 @@ mod test {
         let tree = AsTree::new(&root);
 
         insta::assert_snapshot!(tree, @r"
-        Group [4294967294:0..4294967294:2]
-        └─00: Nonterminal [4294967294:0..4294967294:2]
+        Group [DUMMY]
+        └─00: Nonterminal [DUMMY]
           │   └─ nonterm_0
-          01: Nonterminal [4294967294:0..4294967294:2]
+          01: Nonterminal [DUMMY]
           │   └─ nonterm_1
-          02: Nonterminal [4294967294:0..4294967294:2]
+          02: Nonterminal [DUMMY]
           │   └─ nonterm_2
-          03: Nonterminal [4294967294:0..4294967294:2]
+          03: Nonterminal [DUMMY]
           │   └─ nonterm_3
-          04: Nonterminal [4294967294:0..4294967294:2]
+          04: Nonterminal [DUMMY]
           │   └─ nonterm_4
-          05: Nonterminal [4294967294:0..4294967294:2]
+          05: Nonterminal [DUMMY]
           │   └─ nonterm_5
-          06: Nonterminal [4294967294:0..4294967294:2]
+          06: Nonterminal [DUMMY]
           │   └─ nonterm_6
-          07: Nonterminal [4294967294:0..4294967294:2]
+          07: Nonterminal [DUMMY]
           │   └─ nonterm_7
-          08: Nonterminal [4294967294:0..4294967294:2]
+          08: Nonterminal [DUMMY]
           │   └─ nonterm_8
-          09: Nonterminal [4294967294:0..4294967294:2]
+          09: Nonterminal [DUMMY]
           │   └─ nonterm_9
-          10: Nonterminal [4294967294:0..4294967294:2]
+          10: Nonterminal [DUMMY]
           │   └─ nonterm_10
-          11: Nonterminal [4294967294:0..4294967294:2]
+          11: Nonterminal [DUMMY]
               └─ nonterm_11
         ");
     }

@@ -79,10 +79,14 @@ impl Span {
 
 impl Display for Span {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[cfg(test)]
+        if self.start == DUMMY_SPAN.start {
+            return write!(f, "[DUMMY]");
+        }
         let (start_line, start_off) = self.start_line();
         let (end_line, end_off) = self.end_line();
 
-        write!(f, "[{start_line}:{start_off}..{end_line}:{end_off}]",)
+        write!(f, "[{start_line}:{start_off}..{end_line}:{end_off}]")
     }
 }
 

@@ -86,7 +86,6 @@ fn flatten_choices<'a>(n: &Expr<'a>) -> Option<Expr<'a>> {
 #[cfg(test)]
 mod test {
     use display_tree::AsTree;
-    use insta::assert_compact_debug_snapshot;
 
     use crate::{simplification::simplify_node, token_data::DUMMY_SPAN};
     #[test]
@@ -119,12 +118,12 @@ mod test {
         simplify_node(&mut simplified);
 
         insta::assert_snapshot!(AsTree::new(&simplified), @r"
-        Choice [4294967294:0..4294967294:2]
-        └─0: Nonterminal [4294967294:0..4294967294:2]
+        Choice [DUMMY]
+        └─0: Nonterminal [DUMMY]
           │  └─ nonterminal0027
-          1: Nonterminal [4294967294:0..4294967294:2]
+          1: Nonterminal [DUMMY]
           │  └─ nonterminal0028
-          2: Literal [4294967294:0..4294967294:2]
+          2: Literal [DUMMY]
              └─ 'literal1'
         ");
     }
