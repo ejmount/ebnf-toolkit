@@ -12,14 +12,14 @@ use strum::{EnumDiscriminants, EnumProperty, IntoStaticStr, VariantNames};
 #[strum_discriminants(name(ExprKind), derive(VariantNames, IntoStaticStr))]
 #[non_exhaustive]
 pub enum Expr<'a> {
-    /// A terminal, a string, a whole string and nothing but the string
+    /// A terminal - a string, a whole string and nothing but the string
     Literal {
         #[expect(missing_docs, reason = "Obvious")]
         span: Span,
         #[expect(missing_docs, reason = "Obvious")]
         str: &'a str,
     },
-    /// the name of some other production rule
+    /// The name of some other production rule
     Nonterminal {
         #[expect(missing_docs, reason = "Obvious")]
         span: Span,

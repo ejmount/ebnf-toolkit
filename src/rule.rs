@@ -7,9 +7,12 @@ use std::{
 
 use crate::{Expr, Span, error::EbnfError, parse_rules_from_tokens, token_data::tokenize};
 
+/// A single production rule of a grammar. Will generally be an intermediate step on the way to either creating a [`Grammar`] or analysing the rule's `body`, which represents an ordered sequence of [`Expr`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Rule<'a> {
+    /// The name of this rule - using [`Rule::new`] or [`Grammar::new`] will borrow this from the input data, but an owned String can also be used
     pub name: Cow<'a, str>,
+    /// The sequence of nodes that the name refers to. Semantically equivalent to a [`Expr::Group`]
     pub body: Vec<Expr<'a>>,
 }
 
@@ -53,22 +56,24 @@ impl<'a> Rule<'a> {
     }
 }
 
+/// A set of EBNF rules
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Grammar<'a> {
     rules: HashMap<Cow<'a, str>, Rule<'a>>,
 }
 
-impl<'a> Grammar<'a> {
+impl Grammar<'_> {
     /// Parses a grammar - a sequence of [`Rule`]s from an input string.
     ///
     /// # Errors
-    /// If the input string is ill-formed, an [`EbnfError`] is returned. See that type for possible reasons why.
+    /// If the input string is ill-formed, an [`EbnfError`] is returned. See that type for possible reasons.
     pub fn new(input: &str) -> Result<Grammar<'_>, EbnfError<'_>> {
         let tokens = tokenize(input)?;
         let rules = parse_rules_from_tokens(input, &mut &tokens[..])?;
         Ok(rules.into_iter().collect())
     }
 
+    /// Gets the rule by a given name. The [`Index`] trait is also available to instead panic if the name is not found
     pub fn get(&self, name: &str) -> Option<&Rule> {
         self.rules.get(name)
     }

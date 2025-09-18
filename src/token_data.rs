@@ -20,7 +20,10 @@ pub(crate) const DUMMY_SPAN: Span = Span {
 };
 
 /// A half-open range of the input string a `Node` came from
-#[allow(clippy::derived_hash_with_manual_eq)]
+#[allow(
+    clippy::derived_hash_with_manual_eq,
+    reason = "Overrides PEq for dummy values in test mode, but we don't need to do any hashes"
+)]
 #[derive(Debug, Clone, Copy, Eq, PartialOrd, Ord, Hash)]
 pub struct Span {
     start: usize,
