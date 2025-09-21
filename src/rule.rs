@@ -21,7 +21,7 @@ impl<'a> Rule<'a> {
     ///
     /// # Errors
     /// If the input string is ill-formed, an [`EbnfError`] is returned. See that type for possible reasons why.
-    pub fn new(input: &str) -> Result<Rule<'_>, EbnfError> {
+    pub fn new(input: &str) -> Result<Rule<'_>, EbnfError<'_>> {
         let tokens = tokenize(input)?;
 
         let mut tokens_buffer = &tokens[..];
@@ -84,7 +84,7 @@ impl Grammar<'_> {
     }
 
     /// Gets the rule by a given name. The [`Index`] trait is also available to instead panic if the name is not found
-    pub fn get(&self, name: &str) -> Option<&Rule> {
+    pub fn get(&self, name: &str) -> Option<&Rule<'_>> {
         self.rules.get(name)
     }
 

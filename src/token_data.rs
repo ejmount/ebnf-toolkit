@@ -192,7 +192,7 @@ fn line_counter<'a>(lex: &mut Lexer<'a, TokenPayload<'a>>) -> Skip {
     Skip
 }
 
-pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, EbnfError<'_>> {
+pub(crate) fn tokenize(input: &str) -> Result<Vec<Token<'_>>, EbnfError<'_>> {
     let mut lexer = TokenPayload::lexer(input).spanned();
 
     let mut output = Vec::new();

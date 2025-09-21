@@ -156,21 +156,22 @@ fn handle_parse_error<'a>(
     };
 
     for n in nodes {
-        if let Expr::UnparsedOperator { span, op } = n {
-            if *op != Operator::Equals && *op != Operator::Terminator {
-                let message = match *op {
-                    Operator::OpenedGroup | Operator::OpenedSquare => "Possible unclosed bracket",
-                    Operator::Kleene | Operator::Optional | Operator::Repeat => {
-                        "Could not apply to preceding term"
-                    }
-                    _ => "Operator not understood",
-                };
-                report = report.with_label(
-                    Label::new(("<input>", span.start()..span.end()))
-                        .with_color(colors.next())
-                        .with_message(message),
-                );
-            }
+        if let Expr::UnparsedOperator { span, op } = n
+            && *op != Operator::Equals
+            && *op != Operator::Terminator
+        {
+            let message = match *op {
+                Operator::OpenedGroup | Operator::OpenedSquare => "Possible unclosed bracket",
+                Operator::Kleene | Operator::Optional | Operator::Repeat => {
+                    "Could not apply to preceding term"
+                }
+                _ => "Operator not understood",
+            };
+            report = report.with_label(
+                Label::new(("<input>", span.start()..span.end()))
+                    .with_color(colors.next())
+                    .with_message(message),
+            );
         }
     }
 
