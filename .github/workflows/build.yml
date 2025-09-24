@@ -53,36 +53,34 @@ jobs:
         with:
           command: test
 
-#   coverage:
-#     name: Coverage
-#     needs: test
-#     runs-on: ubuntu-latest
-#     steps:
-#       - name: Checkout sources
-#         uses: actions/checkout@v5
+  coverage:
+    name: Coverage
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v5
 
+      - name: Installing toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: llvm-tools-preview
+          override: true
 
+      - name: Download grcov
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: grcov
 
-#       - name: Installing toolchain
-#         uses: actions-rust-lang/setup-rust-toolchain@v1
-#         with:
-#           components: llvm-tools-preview
-#           override: true
+      - name: Run xtask coverage
+        uses: actions-rs/cargo@v1
+        with:
+          command: xtask
+          args: coverage
 
-#       - name: Download grcov
-#         uses: actions-rs/cargo@v1
-#         with:
-#           command: install
-#           args: grcov
-
-#       - name: Run xtask coverage
-#         uses: actions-rs/cargo@v1
-#         with:
-#           command: xtask
-#           args: coverage
-
-#       - name: Upload coverage reports to Codecov
-#         uses: codecov/codecov-action@v4.0.1
-#         with:
-#           token: ${{ secrets.CODECOV_TOKEN }}
-#           slug: ejmount/ebnf-omnitool
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4.0.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: ejmount/ebnf-omnitool
